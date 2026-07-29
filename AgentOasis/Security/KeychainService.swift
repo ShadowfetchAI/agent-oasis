@@ -31,8 +31,62 @@ enum KeychainService {
         return query
     }
 
+    /// True when the data protection keychain is usable for WRITES by this build.
+    ///
+    /// It needs the `keychain-access-groups` entitlement; without it calls return -34018
+    /// (errSecMissingEntitlement) and the app cannot open its own workspace. Losing access
+    /// to the ledger is a far worse outcome than storing its key in the older keychain, so
+    /// this falls back rather than failing to start.
+    ///
+    /// THE PROBE WRITES, because reads do not need the entitlement. A first attempt at this
+    /// used SecItemCopyMatching and reported the keychain available on a build that could
+    /// not write to it - the read succeeded, the real SecItemAdd then failed with -34018,
+    /// and the app showed that error instead of a workspace. A probe has to exercise the
+    /// operation it is vouching for.
+    private static let dataProtectionAvailable: Bool = {
+        let probeService = "com.realbobcorbin.AgentOasis.probe"
+        var add: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: probeService,
+            kSecAttrAccount: "availability",
+            kSecUseDataProtectionKeychain: true,
+            kSecValueData: Data([0x01])
+        ]
+        var status = SecItemAdd(add as CFDictionary, nil)
+        if status == errSecDuplicateItem { status = errSecSuccess }
+
+        if status == errSecSuccess {
+            let cleanup: [CFString: Any] = [
+                kSecClass: kSecClassGenericPassword,
+                kSecAttrService: probeService,
+                kSecAttrAccount: "availability",
+                kSecUseDataProtectionKeychain: true
+            ]
+            _ = SecItemDelete(cleanup as CFDictionary)
+        }
+        add.removeAll()
+        return status == errSecSuccess
+    }()
+
     static func loadOrCreateKey() throws -> SymmetricKey {
-        if let data = try loadKeyData(dataProtection: true) {
+        guard dataProtectionAvailable else {
+            // Legacy keychain only. Same behaviour as before this type was hardened.
+            if let data = try loadKeyData(dataProtection: false) {
+                guard data.count == 32 else { throw WorkspaceSecurityError.invalidKey }
+                return SymmetricKey(data: data)
+            }
+            let key = SymmetricKey(size: .bits256)
+            var query = baseQuery(dataProtection: false)
+            query[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            query[kSecValueData] = key.withUnsafeBytes { Data($0) }
+            let status = SecItemAdd(query as CFDictionary, nil)
+            guard status == errSecSuccess else {
+                throw WorkspaceSecurityError.keychain(status)
+            }
+            return key
+        }
+
+        if let data = try loadKeyData(dataProtection: dataProtectionAvailable) {
             guard data.count == 32 else { throw WorkspaceSecurityError.invalidKey }
             return SymmetricKey(data: data)
         }
@@ -43,7 +97,8 @@ enum KeychainService {
             // Only remove the old copy once the new one is provably readable. A failed
             // delete leaves a duplicate, which is recoverable; deleting first and failing
             // to write loses the workspace forever.
-            if let confirmed = try? loadKeyData(dataProtection: true), confirmed == legacy {
+            if let confirmed = try? loadKeyData(dataProtection: dataProtectionAvailable),
+               confirmed == legacy {
                 let query = baseQuery(dataProtection: false)
                 _ = SecItemDelete(query as CFDictionary)
             }
@@ -62,7 +117,7 @@ enum KeychainService {
             kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
         let status = SecItemUpdate(
-            baseQuery(dataProtection: true) as CFDictionary,
+            baseQuery(dataProtection: dataProtectionAvailable) as CFDictionary,
             attributes as CFDictionary
         )
         if status == errSecItemNotFound {
@@ -76,7 +131,8 @@ enum KeychainService {
     static func deleteKey() throws {
         // Both keychains: a stale legacy copy of a deleted key is exactly the residue this
         // whole type exists to stop leaving behind.
-        let modern = SecItemDelete(baseQuery(dataProtection: true) as CFDictionary)
+        let modern = SecItemDelete(
+            baseQuery(dataProtection: dataProtectionAvailable) as CFDictionary)
         _ = SecItemDelete(baseQuery(dataProtection: false) as CFDictionary)
         guard modern == errSecSuccess || modern == errSecItemNotFound else {
             throw WorkspaceSecurityError.keychain(modern)
@@ -98,7 +154,7 @@ enum KeychainService {
     }
 
     private static func storeKeyData(_ data: Data) throws {
-        var query = baseQuery(dataProtection: true)
+        var query = baseQuery(dataProtection: dataProtectionAvailable)
         query[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         query[kSecValueData] = data
 
@@ -106,7 +162,7 @@ enum KeychainService {
         if status == errSecDuplicateItem {
             let update: [CFString: Any] = [kSecValueData: data]
             let updated = SecItemUpdate(
-                baseQuery(dataProtection: true) as CFDictionary,
+                baseQuery(dataProtection: dataProtectionAvailable) as CFDictionary,
                 update as CFDictionary
             )
             guard updated == errSecSuccess else {

@@ -12,7 +12,9 @@ settings:
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "MJ53Q33F9P"
-    SWIFT_STRICT_CONCURRENCY: minimal
+    # 'targeted' surfaces real data races in the @Published store and its async
+    # work. 'minimal' silenced the diagnostics rather than the races.
+    SWIFT_STRICT_CONCURRENCY: targeted
     ALWAYS_SEARCH_USER_PATHS: NO
   configs:
     Debug:

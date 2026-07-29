@@ -166,7 +166,9 @@ private struct AgentDetailView: View {
                         value: OasisFormat.currency(economics.modeledCapacityValue),
                         detail: "Equivalent hours x loaded rate",
                         systemImage: "hourglass",
-                        color: OasisPalette.indigo
+                        color: OasisPalette.modeled,
+                        provenance: draft.basis.equivalentHumanHours == .measured
+                            && draft.basis.loadedHourlyRate == .measured ? .measured : .estimated
                     )
                     MetricTile(
                         title: "Net agent value",
@@ -174,7 +176,8 @@ private struct AgentDetailView: View {
                         detail: economics.modeledROI.map { "\(OasisFormat.percent($0)) modeled ROI" }
                             ?? "Enter cost to calculate ROI",
                         systemImage: "chart.line.uptrend.xyaxis",
-                        color: OasisPalette.green
+                        color: OasisPalette.modeled,
+                        provenance: .estimated
                     )
                     MetricTile(
                         title: "Acceptance",
@@ -199,7 +202,24 @@ private struct AgentDetailView: View {
                             ValueLine("Direct operating cost", value: -economics.directCost, color: OasisPalette.coral)
                             Divider()
                             ValueLine("Modeled net value", value: economics.modeledNetValue, color: OasisPalette.modeled, bold: true)
-                            Text("Capacity value describes productive capacity. It is not automatically cash saved.")
+                            Divider()
+                            HStack(spacing: 8) {
+                                Image(systemName: "banknote")
+                                    .foregroundStyle(OasisPalette.cash)
+                                Text("Cash position")
+                                    .font(.caption.weight(.semibold))
+                                Spacer()
+                                Text(OasisFormat.currency(economics.cashNetValue))
+                                    .font(.caption.weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(economics.cashNetValue < 0
+                                                     ? OasisPalette.coral : OasisPalette.cash)
+                            }
+                            Text(economics.isFullyEstimated
+                                 ? "Every value input above was entered by hand. Costs are real; "
+                                   + "the value beside them is a judgement, and the two are not "
+                                   + "added together anywhere in this app."
+                                 : "Modelled value describes productive capacity. It is never "
+                                   + "added to cash.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -222,11 +242,10 @@ private struct AgentDetailView: View {
                                     OasisFormat.currency($0)
                                 } ?? "Unknown"
                             )
-                            ReliabilityLine(
-                                label: "Model confidence",
-                                value: economics.confidence < 0.01
-                                    ? "None"
-                                    : OasisFormat.percent(economics.confidence)
+                            Divider()
+                            EvidenceMeter(
+                                confidence: economics.confidence,
+                                reason: economics.confidenceReason
                             )
                         }
                     }

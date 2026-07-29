@@ -43,9 +43,9 @@ struct CommandCenterView: View {
                         color: summary.netCash >= 0 ? OasisPalette.green : OasisPalette.coral
                     )
                     MetricTile(
-                        title: "Agent net value",
+                        title: "Agent cash value",
                         value: OasisFormat.currency(summary.agentCashNetValue),
-                        detail: "Capacity + revenue + avoided spend - cost",
+                        detail: "Measured revenue minus real cost. Modeled value is excluded.",
                         systemImage: "cpu",
                         color: OasisPalette.indigo
                     )

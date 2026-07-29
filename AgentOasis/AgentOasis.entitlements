@@ -4,5 +4,20 @@
 <dict>
     <key>com.apple.security.network.client</key>
     <true/>
+
+    <!-- FOUNDER DECISION PENDING - the data protection keychain needs this, and it needs a
+         provisioning profile that only the account holder can mint:
+
+           <key>keychain-access-groups</key>
+           <array><string>$(AppIdentifierPrefix)com.realbobcorbin.AgentOasis</string></array>
+
+         Adding it and building with -allowProvisioningUpdates moves the workspace key into
+         the data protection keychain, where kSecAttrAccessibleWhenUnlockedThisDeviceOnly is
+         actually enforced. Without it every such call returns -34018 and the app cannot open
+         its own ledger, so KeychainService probes for availability and falls back to the
+         legacy keychain rather than failing to start. The fallback is the pre-existing
+         behaviour, not a regression - but the stronger protection is NOT in force until this
+         entitlement ships. Enabling App Sandbox would also supply an access group, at the
+         cost of the SSH connector. -->
 </dict>
 </plist>

@@ -35,6 +35,17 @@ struct RootView: View {
         } message: {
             Text(store.errorMessage ?? store.noticeMessage ?? "")
         }
+        .preferredColorScheme(.dark)
+        // README: "For UI validation without an authentication dialog, Debug builds accept
+        // the --demo-unlocked launch argument." It still required a click, which defeats
+        // automated UI capture. Debug-only and compiled out of Release, exactly as before.
+#if DEBUG
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("--demo-unlocked"),
+                  store.lockState == .locked else { return }
+            await store.unlock()
+        }
+#endif
         .onReceive(lockTimer) { now in
             guard store.isUnlocked else { return }
             let threshold = TimeInterval(store.workspace.settings.autoLockMinutes * 60)
@@ -61,9 +72,14 @@ struct RootView: View {
     private var unlockedContent: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
-                .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 280)
+                .navigationSplitViewColumnWidth(min: 224, ideal: 248, max: 300)
         } detail: {
             detail
+                // A quiet backdrop so the material panels have something to sit ON. Flat
+                // opaque panels on a flat opaque window is what made this read as a form
+                // rather than an instrument; depth is what a 2026 macOS app gets for free
+                // from materials, and materials need a ground to be translucent against.
+                .background(OasisBackdrop())
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -120,12 +136,21 @@ struct RootView: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
         .navigationTitle("Agent Oasis")
     }
 
     private func sidebarItem(_ section: AppSection) -> some View {
-        Label(section.title, systemImage: section.systemImage)
-            .tag(section)
+        Label {
+            Text(section.title)
+                .font(.system(size: 13, weight: store.selection == section ? .semibold : .regular))
+        } icon: {
+            Image(systemName: section.systemImage)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(store.selection == section ? OasisPalette.teal : .secondary)
+        }
+        .padding(.vertical, 2)
+        .tag(section)
     }
 
     @ViewBuilder

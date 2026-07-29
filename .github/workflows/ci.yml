@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # macOS 14 deployment target and SwiftUI/Charts, so this must run on a real macOS runner.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the project
+        # project.yml is the source of truth; the .xcodeproj is not committed.
+        run: xcodegen generate
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project AgentOasis.xcodeproj \
+            -scheme AgentOasis \
+            -destination 'platform=macOS' \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Fail on any Swift warning
+        # The project builds clean today. Letting the first warning through is how a
+        # codebase ends up with two hundred of them and no one reading any.
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project AgentOasis.xcodeproj \
+            -scheme AgentOasis \
+            -destination 'platform=macOS' \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee build.log
+          if grep -E "warning: .*\.swift" build.log; then
+            echo "::error::Swift warnings are not allowed."
+            exit 1
+          fi

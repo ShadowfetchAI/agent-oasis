@@ -145,7 +145,8 @@ enum DemoWorkspace {
                 avoidedVendorSpend: 380,
                 lastSeen: now,
                 source: "Sample data",
-                tags: ["iOS", "macOS", "release"]
+                tags: ["iOS", "macOS", "release"],
+                    valueBasis: AgentValueBasis(equivalentHumanHours: .measured, loadedHourlyRate: .measured, directRevenueInfluenced: .measured, avoidedVendorSpend: .measured)
             ),
             AgentProfile(
                 name: "Kai Kimber",
@@ -171,7 +172,8 @@ enum DemoWorkspace {
                 avoidedVendorSpend: 720,
                 lastSeen: now.addingTimeInterval(-640),
                 source: "Sample data",
-                tags: ["web", "editorial", "SEO"]
+                tags: ["web", "editorial", "SEO"],
+                    valueBasis: AgentValueBasis(equivalentHumanHours: .measured, loadedHourlyRate: .estimated, directRevenueInfluenced: .measured, avoidedVendorSpend: .estimated)
             ),
             AgentProfile(
                 name: "Research Analyst",
@@ -197,7 +199,8 @@ enum DemoWorkspace {
                 avoidedVendorSpend: 160,
                 lastSeen: now.addingTimeInterval(-7_200),
                 source: "Sample data",
-                tags: ["research", "market"]
+                tags: ["research", "market"],
+                    valueBasis: AgentValueBasis(equivalentHumanHours: .estimated, loadedHourlyRate: .estimated, directRevenueInfluenced: .measured, avoidedVendorSpend: .estimated)
             ),
             AgentProfile(
                 name: "Fleet Coordinator",
