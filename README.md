@@ -47,7 +47,8 @@ its caveat. The raw arithmetic is still available to anyone who explicitly asks 
 - Read-only fleet telemetry over an SSH alias, with a configurable profiles path
 - Encrypted secret vault and a metadata-only credential inventory
 - Owner-authenticated encrypted backup, recovery key, plaintext CSV export
-- Append-only audit trail that never records secret values
+- Append-only audit trail, hash-chained so removing or editing an entry is detectable, and
+  never recording secret values
 
 ## Install
 
@@ -119,7 +120,7 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -destination 'platform=macOS' test
 ```
 
-47 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
+51 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
 the App Store Connect JWT, the delimited-text importers, and the provenance rules above —
 including that a fully-estimated agent reports zero confidence, that a workspace written
 before provenance existed decodes as estimated rather than silently claiming measurement, that

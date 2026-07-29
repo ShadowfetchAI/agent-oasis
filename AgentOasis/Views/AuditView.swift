@@ -93,7 +93,11 @@ private struct AuditEventRow: View {
                 HStack(spacing: 10) {
                     Text(event.entityName)
                     Text(event.actor)
-                    Text(event.evidenceHash)
+                    // Full digest is 64 hex chars; show a readable prefix and put
+                    // the whole thing behind a tooltip and in the accessibility label.
+                    Text(event.evidenceHash.prefix(16))
+                        .help(event.evidenceHash)
+                        .accessibilityLabel("Evidence hash \(event.evidenceHash)")
                         .font(.system(.caption2, design: .monospaced))
                 }
                 .font(.caption2)

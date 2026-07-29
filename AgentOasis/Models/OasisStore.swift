@@ -900,23 +900,95 @@ final class OasisStore: ObservableObject {
         }
     }
 
+    /// Timestamp format used by the audit chain.
+    ///
+    /// Must match what is PERSISTED. WorkspaceCipher encodes dates as ISO-8601 to second
+    /// precision, so hashing a full-precision `timeIntervalSince1970` produced a digest that
+    /// stopped matching the moment the workspace round-tripped through disk.
+    private static let auditStampFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    /// The digest for one audit entry, chained to the entry before it.
+    ///
+    /// TWO THINGS WERE WRONG WITH THE OLD VERSION, and both made the value decorative while
+    /// it was rendered in monospace beside financial records, where it reads as proof.
+    ///
+    /// 1. `Date()` was called twice - once inside the digest input and once for the stored
+    ///    timestamp - so the value hashed was microseconds away from the value saved. Nobody,
+    ///    including this app, could ever recompute it. It was unverifiable by construction.
+    /// 2. Nothing linked an entry to its predecessor, so any entry could be deleted or
+    ///    reordered and every remaining digest still checked out. A per-row hash with no chain
+    ///    detects a rewritten row and nothing else.
+    ///
+    /// Chaining the previous hash means removing or reordering any entry breaks every digest
+    /// after it, which is what "tamper-evident" has to mean to be worth printing.
+    static func auditDigest(
+        previousHash: String,
+        timestamp: Date,
+        category: String,
+        action: String,
+        actor: String,
+        entityName: String,
+        summary: String
+    ) -> String {
+        let stamp = auditStampFormatter.string(from: timestamp)
+        let input = [previousHash, stamp, category, action, actor, entityName, summary]
+            .joined(separator: "\u{1F}")   // unit separator: cannot occur in these fields
+        return SHA256.hash(data: Data(input.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    /// Recompute the whole chain and return the index of the first entry that does not verify.
+    ///
+    /// Returns nil when the trail is intact. This is what makes the hash a claim the user can
+    /// check rather than a decoration.
+    static func firstBrokenAuditIndex(in audit: [AuditEvent]) -> Int? {
+        var previous = ""
+        for (index, event) in audit.enumerated() {
+            let expected = auditDigest(
+                previousHash: previous,
+                timestamp: event.timestamp,
+                category: event.category,
+                action: event.action,
+                actor: event.actor,
+                entityName: event.entityName,
+                summary: event.summary
+            )
+            if expected != event.evidenceHash { return index }
+            previous = event.evidenceHash
+        }
+        return nil
+    }
+
     private func appendAudit(
         category: String,
         action: String,
         entityName: String,
         summary: String
     ) {
-        let digestInput = "\(Date().timeIntervalSince1970)|\(category)|\(action)|\(entityName)|\(summary)"
-        let digest = SHA256.hash(data: Data(digestInput.utf8))
-            .prefix(8)
-            .map { String(format: "%02x", $0) }
-            .joined()
+        // ONE `now`, used for both the digest and the stored timestamp.
+        let now = Date()
+        let actor = NSFullUserName().isEmpty ? "Device owner" : NSFullUserName()
+        let digest = Self.auditDigest(
+            previousHash: workspace.audit.last?.evidenceHash ?? "",
+            timestamp: now,
+            category: category,
+            action: action,
+            actor: actor,
+            entityName: entityName,
+            summary: summary
+        )
         workspace.audit.append(
             AuditEvent(
-                timestamp: Date(),
+                timestamp: now,
                 category: category,
                 action: action,
-                actor: NSFullUserName().isEmpty ? "Device owner" : NSFullUserName(),
+                actor: actor,
                 entityName: entityName,
                 summary: summary,
                 evidenceHash: digest

@@ -76,3 +76,99 @@ final class CrashAndDataLossTests: XCTestCase {
                        "The retained copy must be the work the restore replaced.")
     }
 }
+
+/// The audit trail's evidence hash has to be something a person can actually check.
+@MainActor
+final class AuditChainTests: XCTestCase {
+
+    private func makeStore() throws -> (OasisStore, URL) {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ao-audit-\(UUID().uuidString)", isDirectory: true)
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let store = OasisStore(
+            repository: repository,
+            keyProvider: { _ in SymmetricKey(size: .bits256) },
+            ownerAuthenticator: { _ in nil }
+        )
+        return (store, directory)
+    }
+
+    /// Every stored entry's hash must be reproducible from its own stored fields.
+    ///
+    /// It was not: `Date()` was called twice, so the digest covered a timestamp microseconds
+    /// away from the one saved. The value was rendered in monospace beside financial records,
+    /// where it reads as tamper-evidence, and could never be verified by anyone.
+    func testEveryAuditHashRecomputesFromItsStoredFields() async throws {
+        let (store, directory) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        await store.unlock()
+
+        XCTAssertFalse(store.workspace.audit.isEmpty, "Unlocking should record an event")
+        XCTAssertNil(OasisStore.firstBrokenAuditIndex(in: store.workspace.audit),
+                     "A freshly written trail must verify against its own stored fields.")
+    }
+
+    /// The chain must survive being encrypted, written and read back.
+    func testAuditChainSurvivesAWorkspaceRoundTrip() async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ao-audit-rt-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let key = SymmetricKey(size: .bits256)
+
+        let first = OasisStore(repository: repository, keyProvider: { _ in key },
+                               ownerAuthenticator: { _ in nil })
+        await first.unlock()
+        first.lock(reason: "test")
+
+        let second = OasisStore(repository: repository, keyProvider: { _ in key },
+                                ownerAuthenticator: { _ in nil })
+        await second.unlock()
+        XCTAssertNil(OasisStore.firstBrokenAuditIndex(in: second.workspace.audit),
+                     "ISO-8601 is what gets persisted, so it is what must be hashed.")
+    }
+
+    /// Editing any recorded field must break that entry's hash.
+    func testRewritingAnEntryBreaksItsHash() async throws {
+        let (store, directory) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        await store.unlock()
+
+        var audit = store.workspace.audit
+        try XCTSkipIf(audit.isEmpty)
+        audit[0].summary = "Something that did not happen"
+        XCTAssertEqual(OasisStore.firstBrokenAuditIndex(in: audit), 0)
+    }
+
+    /// Deleting an entry must break every entry after it — that is what chaining buys.
+    ///
+    /// Without a chain, a per-row hash detects a rewritten row and nothing else: any row could
+    /// be removed or reordered and the survivors all still checked out.
+    func testDeletingAnEntryBreaksTheChain() async throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ao-chain-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let key = SymmetricKey(size: .bits256)
+
+        // unlock -> lock -> unlock accumulates a real multi-entry trail across two sessions.
+        // eraseWorkspace() cannot be used here: it replaces the workspace, so the audit array
+        // is emptied and the record OF the erasure ends up as the only entry.
+        let first = OasisStore(repository: repository, keyProvider: { _ in key },
+                               ownerAuthenticator: { _ in nil })
+        await first.unlock()
+        first.lock(reason: "test")
+        let second = OasisStore(repository: repository, keyProvider: { _ in key },
+                                ownerAuthenticator: { _ in nil })
+        await second.unlock()
+
+        var audit = second.workspace.audit
+        XCTAssertGreaterThanOrEqual(audit.count, 2,
+                                    "Two sessions must leave at least two audit entries.")
+        XCTAssertNil(OasisStore.firstBrokenAuditIndex(in: audit), "Precondition: intact chain")
+
+        audit.remove(at: 0)
+        XCTAssertNotNil(OasisStore.firstBrokenAuditIndex(in: audit),
+                        "Removing an entry must invalidate the entries that followed it.")
+    }
+}
