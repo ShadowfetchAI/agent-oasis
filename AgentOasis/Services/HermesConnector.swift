@@ -79,6 +79,12 @@ done
             arguments: [
                 "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=8",
+                // "--" ends option parsing. The host charset permits "-", and ssh reads a
+                // leading dash as a flag, so without this a host of "-Fsomething" is an
+                // option rather than a destination. The charset excludes "=", "/" and space,
+                // which makes the classic -oProxyCommand= route impractical, but relying on
+                // a character class to be exhaustive is the weaker of the two guarantees.
+                "--",
                 host,
                 remoteCommand
             ]
@@ -154,16 +160,45 @@ done
             process.standardOutput = outputPipe
             process.standardError = errorPipe
             try process.run()
+
+            // DRAIN BEFORE WAITING. The previous order was waitUntilExit() first, then
+            // readDataToEndOfFile(). A pipe holds about 64 KB; once the child fills it the
+            // child blocks on write while the parent blocks on wait, and neither ever moves.
+            // Nothing recovers from that - the app hangs with no error, forever. Reading
+            // concurrently on both descriptors is what makes the wait safe.
+            let outputData = UnsafeSendableBox<Data>(Data())
+            let errorData = UnsafeSendableBox<Data>(Data())
+            let group = DispatchGroup()
+            for (pipe, box) in [(outputPipe, outputData), (errorPipe, errorData)] {
+                group.enter()
+                DispatchQueue.global(qos: .userInitiated).async {
+                    box.value = pipe.fileHandleForReading.readDataToEndOfFile()
+                    group.leave()
+                }
+            }
+
+            // A watchdog, because ConnectTimeout only bounds the TCP handshake. A remote
+            // command that connects and then hangs would otherwise never return.
+            let watchdog = DispatchWorkItem { [weak process] in
+                guard let process, process.isRunning else { return }
+                process.terminate()
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 45, execute: watchdog)
+
             process.waitUntilExit()
-            let output = String(
-                data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            ) ?? ""
-            let error = String(
-                data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8
-            ) ?? ""
+            group.wait()
+            watchdog.cancel()
+
+            let output = String(data: outputData.value, encoding: .utf8) ?? ""
+            let error = String(data: errorData.value, encoding: .utf8) ?? ""
             return (process.terminationStatus, output, error)
         }.value
     }
+}
+
+/// Minimal mutable box so two reader queues can hand results back to the waiting caller.
+/// `group.wait()` establishes the ordering, so there is no concurrent access to `value`.
+private final class UnsafeSendableBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
 }
