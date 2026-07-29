@@ -44,6 +44,12 @@ its caveat. The raw arithmetic is still available to anyone who explicitly asks 
 - Owner-authenticated encrypted backup, recovery key, plaintext CSV export
 - Append-only audit trail that never records secret values
 
+## Install
+
+No signed binary release yet. Agent Oasis needs a Developer ID certificate to pass Gatekeeper
+on someone else's Mac, and shipping an unsigned build that dies at a security warning is worse
+than shipping none. **Build from source for now** — it takes about a minute.
+
 ## Build
 
 Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
