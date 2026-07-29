@@ -1,0 +1,17 @@
+# Build output — 1.1 GB of it was living in the project root.
+DerivedData/
+ReleaseDerivedData/
+VisualDerivedData/
+build/
+*.xcuserstate
+*.profraw
+xcuserdata/
+
+# XcodeGen generates this from project.yml; project.yml is the source of truth.
+AgentOasis.xcodeproj/
+
+# Distributables
+Test Drive/*.zip
+Test Drive/*.app
+
+.DS_Store

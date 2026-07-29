@@ -1,0 +1,69 @@
+name: AgentOasis
+options:
+  bundleIdPrefix: com.realbobcorbin
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  xcodeVersion: "16.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "MJ53Q33F9P"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    ALWAYS_SEARCH_USER_PATHS: NO
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+targets:
+  AgentOasis:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: AgentOasis
+    settings:
+      base:
+        PRODUCT_NAME: Agent Oasis
+        PRODUCT_BUNDLE_IDENTIFIER: com.realbobcorbin.AgentOasis
+        INFOPLIST_FILE: AgentOasis/Info.plist
+        CODE_SIGN_ENTITLEMENTS: AgentOasis/AgentOasis.entitlements
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../Frameworks"
+    scheme:
+      testTargets:
+        - AgentOasisTests
+      gatherCoverageData: true
+
+  AgentOasisTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Tests/AgentOasisTests
+      - path: AgentOasis/Models/DomainModels.swift
+      - path: AgentOasis/Models/DemoWorkspace.swift
+      - path: AgentOasis/Security/WorkspaceCipher.swift
+      - path: AgentOasis/Security/EncryptedWorkspaceRepository.swift
+      - path: AgentOasis/Services/AnalyticsEngine.swift
+      - path: AgentOasis/Services/DelimitedTextParser.swift
+      - path: AgentOasis/Services/ImportExportService.swift
+      - path: AgentOasis/Services/HermesConnector.swift
+      - path: AgentOasis/Services/AppStoreConnectConnector.swift
+    settings:
+      base:
+        PRODUCT_NAME: AgentOasisTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.realbobcorbin.AgentOasisTests
+        GENERATE_INFOPLIST_FILE: YES

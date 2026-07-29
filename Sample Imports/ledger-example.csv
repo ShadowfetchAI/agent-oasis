@@ -1,0 +1,4 @@
+date,type,category,entity,description,amount,currency,source,confidence,notes
+2026-07-01,revenue,Consulting,Shadowfetch,June consulting proceeds,1200.00,USD,Manual,confirmed,Example record
+2026-07-02,expense,AI services,Agent operations,Model and API costs,280.00,USD,Manual,confirmed,Example record
+2026-07-03,cashSavings,Vendor replacement,Kai Kimber,Avoided external publishing invoice,350.00,USD,Manual,estimated,Confirm against a real quote
