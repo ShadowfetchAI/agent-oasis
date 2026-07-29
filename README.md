@@ -5,6 +5,9 @@ business value. Local-first, encrypted on disk, no server and no account.
 
 macOS 14+ · SwiftUI + Charts · MIT licensed
 
+[Product page](https://www.shadowfetch.com/agent-oasis) ·
+[Latest signed release](https://github.com/ShadowfetchAI/agent-oasis/releases/latest)
+
 ---
 
 ## The idea it is built around
@@ -52,9 +55,9 @@ its caveat. The raw arithmetic is still available to anyone who explicitly asks 
 
 ## Install
 
-No signed binary release yet. Agent Oasis needs a Developer ID certificate to pass Gatekeeper
-on someone else's Mac, and shipping an unsigned build that dies at a security warning is worse
-than shipping none. **Build from source for now** — it takes about a minute.
+Download the signed and notarized DMG from
+[Releases](https://github.com/ShadowfetchAI/agent-oasis/releases/latest), open it, and drag
+Agent Oasis to Applications. The release is universal for Apple Silicon and Intel Macs.
 
 See [SETUP.md](SETUP.md) for App Store Connect, fleet telemetry and backups.
 
@@ -70,9 +73,9 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -destination 'platform=macOS' -derivedDataPath DerivedData test
 ```
 
-`project.yml` pins `DEVELOPMENT_TEAM` to the original author's team. To build without an
-Apple Developer account, pass `CODE_SIGNING_ALLOWED=NO` (this is what CI does) or set your
-own team ID.
+`project.yml` does not pin a developer account. To build without an Apple Developer account,
+pass `CODE_SIGNING_ALLOWED=NO` (this is what CI does), or set your own team ID and bundle
+prefix as described in [SETUP.md](SETUP.md).
 
 Debug builds accept `--demo-unlocked`, which skips the authentication dialog for UI work and
 automated capture. It is compiled out of Release builds.
@@ -94,24 +97,13 @@ separately stored recovery key.
 
 Stated plainly, because a security section that only lists strengths is marketing.
 
-- **The Keychain item is not yet in the data protection keychain.** That requires a
-  `keychain-access-groups` entitlement and a provisioning profile. `KeychainService` probes
-  for it at launch and falls back to the legacy keychain rather than refusing to start, so
-  `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` is **not currently enforced**. See the
-  comment in `AgentOasis.entitlements`.
-- **The Touch ID gate is advisory, not cryptographic.** The workspace key is not bound to
-  biometry with `SecAccessControl`, so a process running as you can read it from the Keychain
-  without passing the gate. The gate protects the interface, not the key.
 - **The app is not sandboxed.** It spawns `/usr/bin/ssh` for fleet telemetry, which the
   sandbox forbids. This is a deliberate trade for a directly-distributed tool and it is why
   Agent Oasis is not a Mac App Store app.
-- **The strong Keychain class needs a signed build.** The workspace key is bound to owner
-  presence (`SecAccessControl` with `.userPresence`) and the authenticated `LAContext` from
-  the unlock prompt is handed to the Keychain, so the gate protects the key rather than only
-  the window. This requires the data protection keychain, which needs a `keychain-access-groups`
-  entitlement and a provisioning profile. `KeychainService` probes for it at launch and falls
-  back to the legacy keychain rather than refusing to open your ledger — so **an unsigned
-  build gets the weaker protection**. Build signed with your own team for the full model.
+- **Unsigned source builds use a compatibility fallback.** The official Developer ID release
+  includes the provisioning profile and keychain entitlement needed for the data protection
+  keychain. An unsigned local build cannot claim that entitlement, so it falls back to the
+  legacy keychain rather than locking the owner out of an existing workspace.
 
 ## Tests
 

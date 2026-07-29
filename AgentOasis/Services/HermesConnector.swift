@@ -194,15 +194,11 @@ done
             // child blocks on write while the parent blocks on wait, and neither ever moves.
             // Nothing recovers from that - the app hangs with no error, forever. Reading
             // concurrently on both descriptors is what makes the wait safe.
-            let outputData = UnsafeSendableBox<Data>(Data())
-            let errorData = UnsafeSendableBox<Data>(Data())
-            let group = DispatchGroup()
-            for (pipe, box) in [(outputPipe, outputData), (errorPipe, errorData)] {
-                group.enter()
-                DispatchQueue.global(qos: .userInitiated).async {
-                    box.value = pipe.fileHandleForReading.readDataToEndOfFile()
-                    group.leave()
-                }
+            let outputTask = Task.detached(priority: .userInitiated) {
+                outputPipe.fileHandleForReading.readDataToEndOfFile()
+            }
+            let errorTask = Task.detached(priority: .userInitiated) {
+                errorPipe.fileHandleForReading.readDataToEndOfFile()
             }
 
             // A watchdog, because ConnectTimeout only bounds the TCP handshake. A remote
@@ -214,19 +210,12 @@ done
             DispatchQueue.global().asyncAfter(deadline: .now() + 45, execute: watchdog)
 
             process.waitUntilExit()
-            group.wait()
+            let (outputData, errorData) = await (outputTask.value, errorTask.value)
             watchdog.cancel()
 
-            let output = String(data: outputData.value, encoding: .utf8) ?? ""
-            let error = String(data: errorData.value, encoding: .utf8) ?? ""
+            let output = String(data: outputData, encoding: .utf8) ?? ""
+            let error = String(data: errorData, encoding: .utf8) ?? ""
             return (process.terminationStatus, output, error)
         }.value
     }
-}
-
-/// Minimal mutable box so two reader queues can hand results back to the waiting caller.
-/// `group.wait()` establishes the ordering, so there is no concurrent access to `value`.
-private final class UnsafeSendableBox<T>: @unchecked Sendable {
-    var value: T
-    init(_ value: T) { self.value = value }
 }

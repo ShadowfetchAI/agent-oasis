@@ -3,7 +3,13 @@
 Agent Oasis starts with an **empty** workspace — it never invents records — and runs fully
 offline. The sections below are for connecting it to your own data. All of them are optional.
 
-## 1. Build and run
+## 1. Install or build
+
+The easiest path is the signed, notarized DMG on the
+[latest release](https://github.com/ShadowfetchAI/agent-oasis/releases/latest). Open it and
+drag Agent Oasis to Applications.
+
+To build from source:
 
 ```sh
 brew install xcodegen
@@ -69,7 +75,7 @@ If nothing is found, the error names the directory it searched so you can correc
 
 **Vault → Export encrypted backup**, and **Vault → Reveal recovery key** (stored separately).
 The workspace is encrypted with a key held in your Mac's Keychain — lose the Mac without a
-backup and the data is gone. This is v0.1 software; treat it accordingly.
+backup and the data is gone. This is early software; treat it accordingly.
 
 ## What leaves your machine
 
