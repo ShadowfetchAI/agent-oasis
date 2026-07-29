@@ -20,6 +20,14 @@ struct CommandCenterView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                if store.workspace.apps.isEmpty && store.workspace.agents.isEmpty
+
+                    && store.workspace.ledger.isEmpty {
+
+                    GettingStartedPanel()
+
+                }
+
                 PageHeader(
                     "Command Center",
                     subtitle: "Cash, portfolio movement, experiments, and agent economics in one view."
@@ -281,6 +289,74 @@ private struct SignalRow: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+struct GettingStartedPanel: View {
+    @EnvironmentObject private var store: OasisStore
+
+    /// Shown until the workspace has real content in it.
+    ///
+    /// A new workspace is deliberately empty - the app no longer invents a portfolio to fill
+    /// the screen - so it owes the user an explanation of what to do instead of a blank grid.
+    /// Every step here is optional and local; none of them require an account.
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(OasisNeon.cyan)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Your workspace is empty")
+                        .font(.title3.weight(.semibold))
+                    Text("Nothing here is made up. Add your own data and every figure stays "
+                         + "yours, on this Mac.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                step("1", "square.and.arrow.down",
+                     "Import a Sales and Trends report",
+                     "Toolbar → Import. Adds real units and proceeds. Re-importing the same "
+                         + "file will not double-count it.")
+                step("2", "key.horizontal",
+                     "Connect App Store Connect (optional)",
+                     "Vault → add your .p8 key, then Connections. Read-only; it syncs app "
+                         + "records, never money.")
+                step("3", "person.2",
+                     "Add the agents you actually run",
+                     "Agents → add. Mark each value input as measured or estimated - the app "
+                         + "keeps cash and modelled value apart and will not blend them.")
+                step("4", "arrow.down.doc",
+                     "Export a backup and keep the recovery key",
+                     "Vault → Export encrypted backup. Without it, losing this Mac loses the "
+                         + "workspace.")
+            }
+        }
+        .padding(OasisMetrics.panelPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .oasisSurface()
+    }
+
+    private func step(_ number: String, _ symbol: String,
+                      _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(OasisNeon.cyan)
+                .frame(width: 20, height: 20)
+                .background(OasisNeon.cyan.opacity(0.14), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Label(title, systemImage: symbol)
+                    .font(.subheadline.weight(.medium))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
         }
     }
 }

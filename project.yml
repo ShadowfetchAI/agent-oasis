@@ -67,7 +67,6 @@ targets:
     sources:
       - path: Tests/AgentOasisTests
       - path: AgentOasis/Models/DomainModels.swift
-      - path: AgentOasis/Models/DemoWorkspace.swift
       - path: AgentOasis/Security/WorkspaceCipher.swift
       - path: AgentOasis/Security/EncryptedWorkspaceRepository.swift
       - path: AgentOasis/Services/AnalyticsEngine.swift

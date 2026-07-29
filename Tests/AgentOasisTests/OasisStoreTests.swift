@@ -70,7 +70,6 @@ final class OasisStoreTests: XCTestCase {
         XCTAssertTrue(first.isUnlocked)
         let seededID = first.workspace.workspaceID
         let seededAgents = first.workspace.agents.count
-        XCTAssertGreaterThan(seededAgents, 0, "First launch should seed a sample workspace")
 
         let second = try makeStore(key: key)
         await second.unlock()
@@ -268,5 +267,46 @@ final class OasisStoreTests: XCTestCase {
             .deletingLastPathComponent().appendingPathComponent(archived[0]))
         XCTAssertEqual(kept, corrupt,
                        "The bytes may still be recoverable with a key from another Mac.")
+    }
+
+    // MARK: - No fabricated data, ever
+
+    /// A brand new workspace contains nothing the user did not put there.
+    ///
+    /// First launch used to seed a full sample portfolio - invented revenue, agent ROI,
+    /// experiment results - and nothing in the interface said so. On a tool built to separate
+    /// measured numbers from estimated ones, opening with fabricated financials was the one
+    /// thing it could not defensibly do.
+    func testNewWorkspaceIsCompletelyEmpty() async throws {
+        let store = try makeStore(key: SymmetricKey(size: .bits256))
+        await store.unlock()
+        XCTAssertTrue(store.isUnlocked)
+
+        XCTAssertTrue(store.workspace.apps.isEmpty, "No invented portfolio apps.")
+        XCTAssertTrue(store.workspace.agents.isEmpty, "No invented agents.")
+        XCTAssertTrue(store.workspace.experiments.isEmpty, "No invented experiments.")
+        XCTAssertTrue(store.workspace.connections.isEmpty, "No invented connections.")
+        XCTAssertTrue(store.workspace.vaultItems.isEmpty, "No invented vault items.")
+
+        // The ledger holds only this session's own audit-adjacent activity, never money.
+        let revenue = AnalyticsEngine.summary(for: store.workspace)
+        XCTAssertEqual(revenue.cashRevenue, 0, "A new workspace must report no revenue.")
+        XCTAssertEqual(revenue.cashExpenses, 0)
+        XCTAssertEqual(revenue.capacityValue, 0, "Nor any modelled value.")
+    }
+
+    /// Erasing keeps a recoverable copy rather than destroying vault keys outright.
+    func testEraseKeepsAPreEraseSnapshot() async throws {
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let key = SymmetricKey(size: .bits256)
+        let store = OasisStore(repository: repository, keyProvider: { _ in key },
+                               ownerAuthenticator: { _ in nil })
+        await store.unlock()
+        store.eraseWorkspace()
+
+        let siblings = try FileManager.default.contentsOfDirectory(
+            atPath: repository.workspaceURL.deletingLastPathComponent().path)
+        XCTAssertTrue(siblings.contains { $0.hasPrefix("workspace-before-erase-") },
+                      "Erase must keep a copy: it removes vault keys that may exist nowhere else.")
     }
 }

@@ -220,9 +220,15 @@ final class OasisStore: ObservableObject {
             if loaded == nil {
                 // Bind it rather than force-unwrapping: `loaded!` was safe by inspection, but
                 // a data path should not rely on the reader re-deriving that each time.
-                let seeded = DemoWorkspace.make()
-                try store.save(seeded, using: loadedKey)
-                loaded = seeded
+                // A NEW WORKSPACE IS EMPTY. It used to be seeded with a full sample
+                // portfolio - invented revenue, agent ROI and experiment results - so a
+                // stranger's first screen was fabricated financials with nothing marking them
+                // as fake. This app exists to tell you which numbers are measured and which
+                // are guessed; opening with a screen of neither was indefensible.
+                var fresh = WorkspaceState()
+                fresh.name = "My Workspace"
+                try store.save(fresh, using: loadedKey)
+                loaded = fresh
             }
             guard let unwrapped = loaded else {
                 throw WorkspaceSecurityError.invalidBackup
@@ -825,18 +831,41 @@ final class OasisStore: ObservableObject {
         }
     }
 
-    func resetToDemo() {
-        guard isUnlocked else { return }
-        let reset = DemoWorkspace.make()
-        workspace = reset
+    /// Erase everything and start over with an empty workspace.
+    ///
+    /// Was `resetToDemo`, which replaced the user's records with fabricated ones. It also
+    /// destroyed the vault - App Store Connect private keys that may exist nowhere else - and
+    /// the entire audit history, in place, with no snapshot. The pre-erase copy below is what
+    /// makes this recoverable instead of final.
+    func eraseWorkspace() {
+        guard isUnlocked, let key else { return }
+
+        // Keep what is being destroyed. A one-click action that removes private keys and the
+        // whole audit trail must not be irreversible.
+        if let store = try? requireRepository(),
+           let existing = try? Data(contentsOf: store.workspaceURL) {
+            let stamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let snapshot = store.workspaceURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("workspace-before-erase-\(stamp).aovault")
+            try? existing.write(to: snapshot, options: [.atomic])
+        }
+
+        var fresh = WorkspaceState()
+        fresh.name = workspace.name
+        fresh.settings = workspace.settings
+        workspace = fresh
         appendAudit(
             category: "Workspace",
-            action: "Reset",
-            entityName: reset.name,
-            summary: "Replaced the current workspace with a fresh sample workspace."
+            action: "Erased",
+            entityName: workspace.name,
+            summary: "Replaced the workspace with an empty one. A pre-erase copy was kept "
+                + "beside it, encrypted with the same key."
         )
+        _ = key
         persist()
-        noticeMessage = "Sample workspace restored."
+        noticeMessage = "Workspace erased. A copy of the previous contents was kept beside it."
     }
 
     private func exportCSV(suggestedName: String, data: Data, entityName: String) {

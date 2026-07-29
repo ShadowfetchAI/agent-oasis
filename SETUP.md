@@ -1,7 +1,7 @@
 # Setting up Agent Oasis
 
-Everything here is optional. Agent Oasis runs fully offline with a sample workspace on first
-launch; the sections below are for connecting it to your own data.
+Agent Oasis starts with an **empty** workspace — it never invents records — and runs fully
+offline. The sections below are for connecting it to your own data. All of them are optional.
 
 ## 1. Build and run
 

@@ -495,7 +495,6 @@ struct WorkspaceSettings: Codable, Hashable {
     /// systemd --user unit pattern for a running agent gateway.
     var hermesGatewayUnitPattern = "hermes-gw@*.service"
     var showCapacityValueInHeadline = false
-    var includeDemoData = true
 }
 
 struct WorkspaceState: Codable, Hashable {

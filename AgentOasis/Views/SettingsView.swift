@@ -154,14 +154,14 @@ struct SettingsView: View {
                 OasisPanel {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Reset sample workspace")
+                            Text("Erase workspace")
                                 .font(.headline)
-                            Text("Replaces the current encrypted workspace with fresh sample data.")
+                            Text("Deletes every app, agent, ledger entry, experiment and vault item. A copy of the current workspace is kept beside it, encrypted with the same key.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button("Reset Sample Data", role: .destructive) {
+                        Button("Erase Workspace…", role: .destructive) {
                             showingResetConfirmation = true
                         }
                     }
@@ -175,12 +175,12 @@ struct SettingsView: View {
             settings = store.workspace.settings
         }
         .confirmationDialog(
-            "Reset the encrypted workspace?",
+            "Erase this workspace?",
             isPresented: $showingResetConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Reset to Sample Data", role: .destructive) {
-                store.resetToDemo()
+            Button("Erase Everything", role: .destructive) {
+                store.eraseWorkspace()
                 workspaceName = store.workspace.name
                 settings = store.workspace.settings
             }

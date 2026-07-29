@@ -1,3 +1,16 @@
+// A populated workspace used ONLY as a test fixture.
+//
+// This file used to live in the app target and seed every first launch: a stranger's opening
+// screen was a Command Center full of invented revenue, agent ROI and experiment results, with
+// nothing anywhere labelling it as fake. On a tool whose entire purpose is telling you which
+// of your numbers are measured and which are guessed, shipping fabricated financials as the
+// default state was the worst possible contradiction.
+//
+// It now lives in the test target, so the shipped binary cannot produce a sample record at
+// all - not as a default, not behind a setting, not by accident. That is a structural
+// guarantee rather than a promise, and `grep -r DemoWorkspace AgentOasis/` proving empty is
+// the whole argument.
+
 import Foundation
 
 enum DemoWorkspace {

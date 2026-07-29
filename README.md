@@ -21,6 +21,11 @@ computed separately, displayed separately, and **never summed anywhere in the ap
 | **Cash** | money that actually moved: real costs, and revenue someone measured |
 | **Modelled** | capacity value, avoided spend, asserted revenue — judgements, useful for planning |
 
+**Nothing is ever fabricated.** A new workspace is empty. The app ships with no sample data
+at all — not as a default, not behind a setting. `DemoWorkspace` lives in the test target, so
+the shipped binary is structurally incapable of inventing a record, and a test walks the app
+sources and fails if that machinery returns. Every figure you see is one you put there.
+
 **Confidence measures evidence, not activity.** An agent with four hand-entered value inputs
 scores **zero confidence** no matter how many tasks it completed today. Staleness can lower
 that score; nothing can inflate it. If the number has no evidence behind it, the app says so
@@ -114,7 +119,7 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -destination 'platform=macOS' test
 ```
 
-44 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
+47 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
 the App Store Connect JWT, the delimited-text importers, and the provenance rules above —
 including that a fully-estimated agent reports zero confidence, that a workspace written
 before provenance existed decodes as estimated rather than silently claiming measurement, that
