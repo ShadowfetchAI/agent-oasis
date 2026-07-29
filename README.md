@@ -114,11 +114,14 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -destination 'platform=macOS' test
 ```
 
-25 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
+40 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
 the App Store Connect JWT, the delimited-text importers, and the provenance rules above —
 including that a fully-estimated agent reports zero confidence, that a workspace written
-before provenance existed decodes as estimated rather than silently claiming measurement, and
-that the configurable fleet paths reject shell injection and `..` escapes.
+before provenance existed decodes as estimated rather than silently claiming measurement, that
+the configurable fleet paths reject shell injection and `..` escapes, and — added after an
+audit found them — that an unreadable workspace is recoverable from a backup **while locked
+out**, that a failed restore is a no-op on your data, and that re-importing the same sales
+report does not double your revenue.
 
 ## Licence
 

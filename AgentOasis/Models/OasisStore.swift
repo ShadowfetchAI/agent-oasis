@@ -35,6 +35,12 @@ final class OasisStore: ObservableObject {
     /// Set when storage could not be created. Non-nil means the app cannot persist anything.
     @Published private(set) var startupFailure: String?
 
+    /// A workspace file exists but cannot be decrypted with this Mac's key.
+    ///
+    /// Drives the locked-screen recovery route. Distinguishing this from "wrong finger" is
+    /// what turns a dead end into a recoverable situation.
+    @Published private(set) var workspaceUnreadable = false
+
     private var key: SymmetricKey?
 
     var isUnlocked: Bool { lockState == .unlocked }
@@ -100,6 +106,94 @@ final class OasisStore: ObservableObject {
         }
     }
 
+    /// True when the user simply dismissed the authentication sheet.
+    private func isAuthenticationCancellation(_ error: Error) -> Bool {
+        guard let laError = error as? LAError else { return false }
+        switch laError.code {
+        case .userCancel, .systemCancel, .appCancel: return true
+        default: return false
+        }
+    }
+
+    /// Restore an encrypted backup WITHOUT being unlocked first.
+    ///
+    /// Exists for the one situation the normal restore cannot serve: the workspace on disk is
+    /// undecryptable, so there is no way to reach the unlocked state that `restoreBackup`
+    /// demands. Requires owner authentication and a recovery key that actually decrypts the
+    /// chosen backup, so it grants nothing that was not already granted by holding both.
+    func recoverFromBackup(url: URL, recoveryKey: String) async -> Bool {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            _ = try await ownerAuthenticator("Restore an encrypted Agent Oasis backup.")
+            let normalized = recoveryKey.components(separatedBy: .whitespacesAndNewlines).joined()
+            guard let keyData = Data(base64Encoded: normalized), keyData.count == 32 else {
+                throw WorkspaceSecurityError.invalidBackup
+            }
+            let candidateKey = SymmetricKey(data: keyData)
+            let backupData = try Data(contentsOf: url)
+
+            // Prove the backup opens BEFORE touching anything the user still has.
+            let restoredState = try WorkspaceCipher.decrypt(
+                WorkspaceState.self, from: backupData, using: candidateKey)
+
+            let store = try requireRepository()
+            // File first, Keychain second. The reverse order can leave the Keychain holding a
+            // key that opens nothing while the only file is sealed under a key that no longer
+            // exists anywhere - an unrecoverable lockout produced by the recovery feature.
+            _ = try store.restoreEncryptedBackup(backupData, using: candidateKey)
+            _ = try KeychainService.replaceKey(with: keyData)
+
+            key = candidateKey
+            workspace = restoredState
+            lockState = .unlocked
+            workspaceUnreadable = false
+            appendAudit(
+                category: "Backup",
+                action: "Recovered from encrypted backup",
+                entityName: url.lastPathComponent,
+                summary: "Restored an unreadable workspace from an encrypted backup after owner authentication."
+            )
+            persist()
+            noticeMessage = "Workspace recovered from the encrypted backup."
+            return true
+        } catch {
+            if !isAuthenticationCancellation(error) {
+                errorMessage = error.localizedDescription
+            }
+            return false
+        }
+    }
+
+    /// Move an undecryptable workspace aside and start fresh, keeping the old bytes.
+    ///
+    /// Never deletes. The unreadable file may still be recoverable with a key from another
+    /// Mac or an older backup, and destroying it to unblock the UI would remove that chance
+    /// permanently.
+    func setAsideUnreadableWorkspace() async -> Bool {
+        do {
+            _ = try await ownerAuthenticator("Set aside the unreadable Agent Oasis workspace.")
+            let store = try requireRepository()
+            let stamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let archived = store.workspaceURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("workspace-unreadable-\(stamp).aovault")
+            if FileManager.default.fileExists(atPath: store.workspaceURL.path) {
+                try FileManager.default.moveItem(at: store.workspaceURL, to: archived)
+            }
+            workspaceUnreadable = false
+            noticeMessage = "The unreadable workspace was kept at \(archived.lastPathComponent). "
+                + "A new empty workspace will be created when you unlock."
+            return true
+        } catch {
+            if !isAuthenticationCancellation(error) {
+                errorMessage = error.localizedDescription
+            }
+            return false
+        }
+    }
+
     func unlock() async {
         guard lockState == .locked else { return }
         lockState = .authenticating
@@ -127,9 +221,13 @@ final class OasisStore: ObservableObject {
                 try store.save(seeded, using: loadedKey)
                 loaded = seeded
             }
+            guard let unwrapped = loaded else {
+                throw WorkspaceSecurityError.invalidBackup
+            }
             key = loadedKey
-            workspace = loaded!
+            workspace = unwrapped
             lockState = .unlocked
+            workspaceUnreadable = false
 #if DEBUG
             let unlockSummary = bypass
                 ? "Workspace unlocked for local debug validation."
@@ -148,6 +246,24 @@ final class OasisStore: ObservableObject {
             key = nil
             workspace = .empty
             lockState = .locked
+
+            // A workspace that EXISTS but will not decrypt is not a failed login, it is a
+            // person locked out of their own records - and until now there was no way back.
+            // `restoreBackup` required `isUnlocked`, which this state can never reach, so the
+            // encrypted backup the app told them to make was unusable at precisely the moment
+            // it was needed.
+            //
+            // The realistic route here is not a forgotten password. It is Migration Assistant:
+            // workspace.aovault travels to the new Mac, the Keychain item does not because it
+            // is WhenUnlockedThisDeviceOnly, a fresh key is minted, and AES-GCM authentication
+            // fails on a file that is completely intact.
+            workspaceUnreadable = (try? requireRepository())
+                .map { FileManager.default.fileExists(atPath: $0.workspaceURL.path) } ?? false
+                && !isAuthenticationCancellation(error)
+
+            // Deliberately dismissing the biometric sheet must not raise a modal telling the
+            // user "Canceled by user." - the app scolding someone for a choice they just made.
+            if isAuthenticationCancellation(error) { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -359,16 +475,14 @@ final class OasisStore: ObservableObject {
     }
 
     func restoreBackup(from url: URL, recoveryKey: String) async -> Bool {
-        guard isUnlocked, let currentKey = key else { return false }
+        guard isUnlocked, key != nil else { return false }
         let accessed = url.startAccessingSecurityScopedResource()
         defer {
             if accessed { url.stopAccessingSecurityScopedResource() }
         }
 
         do {
-            try await DeviceOwnerAuthenticator.authenticate(
-                reason: "Restore an encrypted Agent Oasis backup."
-            )
+            _ = try await ownerAuthenticator("Restore an encrypted Agent Oasis backup.")
             let normalized = recoveryKey
                 .components(separatedBy: .whitespacesAndNewlines)
                 .joined()
@@ -384,19 +498,41 @@ final class OasisStore: ObservableObject {
                 using: candidateKey
             )
 
-            let currentKeyData = currentKey.withUnsafeBytes { Data($0) }
+            // The workspace can auto-lock while this function is suspended in the biometric
+            // prompt: RootView drives lock from a timer, sleep and screen-lock, all on the
+            // main actor, which is free to run during the await. Without re-checking, the
+            // continuation would repopulate `key` and `workspace` behind a lock screen the
+            // user believes is protecting them.
+            guard isUnlocked, key != nil else {
+                throw WorkspaceSecurityError.workspaceLocked
+            }
+
+            // FILE FIRST, KEYCHAIN SECOND.
+            //
+            // The reverse order was a lockout generator: if the file write failed (disk full,
+            // volume detached) the Keychain already held the BACKUP's key while the workspace
+            // on disk was still sealed under the ORIGINAL key - which existed nowhere else.
+            // The compensating write was `try?`, so its own failure was discarded silently and
+            // the next launch met an undecryptable workspace with no explanation.
+            //
+            // Writing the file first means a Keychain failure leaves a readable file and a
+            // stale key, which the rollback below can still repair - and if even that fails,
+            // the recovery route on the locked screen can finish the job.
+            let restored = try requireRepository().restoreEncryptedBackup(
+                backupData,
+                using: candidateKey
+            )
             do {
                 _ = try KeychainService.replaceKey(with: keyData)
-                let restored = try requireRepository().restoreEncryptedBackup(
-                    backupData,
-                    using: candidateKey
-                )
-                key = candidateKey
-                workspace = restored
             } catch {
-                _ = try? KeychainService.replaceKey(with: currentKeyData)
+                // The file is now the backup's, so the key must follow or nothing opens.
+                // Report rather than swallow: this is the state the user has to know about.
+                errorMessage = "The backup was restored but this Mac's key could not be "
+                    + "updated. Keep your recovery key: you may need it to reopen Agent Oasis."
                 throw error
             }
+            key = candidateKey
+            workspace = restored
 
             workspace.updatedAt = Date()
             appendAudit(
@@ -584,8 +720,15 @@ final class OasisStore: ObservableObject {
             ) { state in
                 for record in records {
                     if let index = state.apps.firstIndex(where: {
-                        $0.bundleID.caseInsensitiveCompare(record.bundleID) == .orderedSame
-                            || (!$0.sku.isEmpty
+                        // Both arms must require a non-empty identifier. The sku arm already
+                        // did; the bundleID arm did not, so a locally created app with a blank
+                        // bundleID matched ANY incoming record that also had one - and then
+                        // absorbed its name, bundleID and sku while keeping its own
+                        // observations and ledger history. That silently re-attaches one app's
+                        // financial record to a different app.
+                        (!$0.bundleID.isEmpty && !record.bundleID.isEmpty
+                            && $0.bundleID.caseInsensitiveCompare(record.bundleID) == .orderedSame)
+                            || (!$0.sku.isEmpty && !record.sku.isEmpty
                                 && $0.sku.caseInsensitiveCompare(record.sku) == .orderedSame)
                     }) {
                         state.apps[index].name = record.name

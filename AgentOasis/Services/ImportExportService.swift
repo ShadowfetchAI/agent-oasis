@@ -96,6 +96,8 @@ enum ImportExportService {
     ) -> ImportSummary {
         var appsCreated = 0
         var observationsAdded = 0
+        var ledgerAdded = 0
+        let calendar = Calendar(identifier: .gregorian)
         let grouped = Dictionary(grouping: rows) { row in
             value(in: row, keys: ["SKU", "Title", "App Name", "Apple Identifier"]) ?? "Imported App"
         }
@@ -144,34 +146,54 @@ enum ImportExportService {
                     $0 + (decimal(value(in: $1, keys: ["Developer Proceeds", "Proceeds"])) ?? 0)
                 }
                 let currency = value(in: dateRows[0], keys: ["Currency of Proceeds", "Customer Currency"]) ?? "USD"
-                state.apps[appIndex].observations.append(
-                    AppObservation(
-                        date: date,
-                        units: units,
-                        proceeds: proceeds,
-                        currency: currency,
-                        source: sourceName,
-                        confidence: .confirmed
-                    )
+                // IDEMPOTENT BY (app, day, source). The previous version appended
+                // unconditionally, so importing the same monthly Sales and Trends file twice -
+                // a re-download, a retry after a mis-click, the same file kept in two folders -
+                // doubled reported revenue. AnalyticsEngine sums state.ledger directly, so the
+                // headline figure doubled with it, silently and permanently.
+                let observation = AppObservation(
+                    date: date,
+                    units: units,
+                    proceeds: proceeds,
+                    currency: currency,
+                    source: sourceName,
+                    confidence: .confirmed
                 )
-                observationsAdded += 1
+                if let existing = state.apps[appIndex].observations.firstIndex(where: {
+                    $0.source == sourceName && calendar.isDate($0.date, inSameDayAs: date)
+                }) {
+                    // A corrected re-export of the same day should REPLACE, not accumulate.
+                    state.apps[appIndex].observations[existing] = observation
+                } else {
+                    state.apps[appIndex].observations.append(observation)
+                    observationsAdded += 1
+                }
 
-                state.ledger.append(
-                    LedgerEntry(
-                        date: date,
-                        type: .revenue,
-                        category: "App sales",
-                        entityKind: .app,
-                        entityID: state.apps[appIndex].id,
-                        entityName: state.apps[appIndex].name,
-                        description: "Developer proceeds from imported report",
-                        amount: proceeds,
-                        currency: currency,
-                        source: sourceName,
-                        confidence: .confirmed,
-                        notes: "Imported alongside \(units) reported units."
-                    )
+                let appID = state.apps[appIndex].id
+                let entry = LedgerEntry(
+                    date: date,
+                    type: .revenue,
+                    category: "App sales",
+                    entityKind: .app,
+                    entityID: appID,
+                    entityName: state.apps[appIndex].name,
+                    description: "Developer proceeds from imported report",
+                    amount: proceeds,
+                    currency: currency,
+                    source: sourceName,
+                    confidence: .confirmed,
+                    notes: "Imported alongside \(units) reported units."
                 )
+                if let existing = state.ledger.firstIndex(where: {
+                    $0.entityID == appID && $0.source == sourceName
+                        && $0.category == "App sales"
+                        && calendar.isDate($0.date, inSameDayAs: date)
+                }) {
+                    state.ledger[existing] = entry
+                } else {
+                    state.ledger.append(entry)
+                    ledgerAdded += 1
+                }
             }
         }
 
@@ -179,7 +201,7 @@ enum ImportExportService {
             sourceName: sourceName,
             appsCreated: appsCreated,
             observationsAdded: observationsAdded,
-            ledgerEntriesAdded: observationsAdded
+            ledgerEntriesAdded: ledgerAdded
         )
     }
 

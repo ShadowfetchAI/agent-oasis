@@ -167,4 +167,106 @@ final class OasisStoreTests: XCTestCase {
         XCTAssertEqual(before, after,
                        "Presenting the wrong key must never rewrite the workspace.")
     }
+
+    // MARK: - Recovery from an undecryptable workspace
+    //
+    // The realistic route into this state is Migration Assistant, not a forgotten password:
+    // workspace.aovault travels to a new Mac, the Keychain item does not (it is
+    // WhenUnlockedThisDeviceOnly), a fresh key is minted, and AES-GCM fails on a file that is
+    // completely intact. Before this, restoreBackup required isUnlocked - a state that can
+    // never be reached here - so the encrypted backup the app tells you to make was useless at
+    // exactly the moment it was needed.
+
+    /// An undecryptable workspace must be flagged as recoverable, not just "failed to unlock".
+    func testUndecryptableWorkspaceIsFlaggedForRecovery() async throws {
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let realKey = SymmetricKey(size: .bits256)
+        let seeded = OasisStore(repository: repository, keyProvider: { _ in realKey },
+                                ownerAuthenticator: { _ in nil })
+        await seeded.unlock()
+        XCTAssertTrue(seeded.isUnlocked)
+
+        // A different Mac: same file, different key.
+        let migrated = OasisStore(repository: repository,
+                                  keyProvider: { _ in SymmetricKey(size: .bits256) },
+                                  ownerAuthenticator: { _ in nil })
+        await migrated.unlock()
+
+        XCTAssertFalse(migrated.isUnlocked)
+        XCTAssertTrue(migrated.workspaceUnreadable,
+                      "An intact but undecryptable workspace must offer a way out.")
+    }
+
+    /// Recovery works WITHOUT being unlocked first, which is the entire point.
+    func testRecoverFromBackupWorksWhileLockedOut() async throws {
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let originalKey = SymmetricKey(size: .bits256)
+        let original = OasisStore(repository: repository, keyProvider: { _ in originalKey },
+                                  ownerAuthenticator: { _ in nil })
+        await original.unlock()
+        let expectedID = original.workspace.workspaceID
+
+        // The backup the user was told to make, plus its recovery key.
+        let backup = directory.appendingPathComponent("backup.oasisbackup")
+        try Data(contentsOf: repository.workspaceURL).write(to: backup)
+        let recoveryKey = originalKey.withUnsafeBytes { Data($0).base64EncodedString() }
+
+        // New Mac: the key is gone.
+        let strandedRepo = try EncryptedWorkspaceRepository(
+            baseDirectory: directory.appendingPathComponent("newmac"))
+        try Data(contentsOf: repository.workspaceURL).write(to: strandedRepo.workspaceURL)
+        let stranded = OasisStore(repository: strandedRepo,
+                                  keyProvider: { _ in SymmetricKey(size: .bits256) },
+                                  ownerAuthenticator: { _ in nil })
+        await stranded.unlock()
+        XCTAssertFalse(stranded.isUnlocked)
+        XCTAssertTrue(stranded.workspaceUnreadable)
+
+        let recovered = await stranded.recoverFromBackup(url: backup, recoveryKey: recoveryKey)
+        XCTAssertTrue(recovered, "A valid backup plus its recovery key must open the app.")
+        XCTAssertTrue(stranded.isUnlocked)
+        XCTAssertEqual(stranded.workspace.workspaceID, expectedID)
+    }
+
+    /// A wrong recovery key must change nothing at all.
+    func testFailedRecoveryLeavesEverythingUntouched() async throws {
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let key = SymmetricKey(size: .bits256)
+        let store = OasisStore(repository: repository, keyProvider: { _ in key },
+                               ownerAuthenticator: { _ in nil })
+        await store.unlock()
+        let before = try Data(contentsOf: repository.workspaceURL)
+
+        let backup = directory.appendingPathComponent("b.oasisbackup")
+        try before.write(to: backup)
+        let wrongKey = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0).base64EncodedString() }
+
+        let ok = await store.recoverFromBackup(url: backup, recoveryKey: wrongKey)
+        XCTAssertFalse(ok)
+        XCTAssertEqual(try Data(contentsOf: repository.workspaceURL), before,
+                       "A failed recovery must not touch the user's workspace.")
+    }
+
+    /// Setting aside an unreadable workspace must PRESERVE it, never delete it.
+    func testSetAsideKeepsTheUnreadableBytes() async throws {
+        let repository = try EncryptedWorkspaceRepository(baseDirectory: directory)
+        let corrupt = Data("unreadable".utf8)
+        try corrupt.write(to: repository.workspaceURL)
+
+        let store = OasisStore(repository: repository,
+                               keyProvider: { _ in SymmetricKey(size: .bits256) },
+                               ownerAuthenticator: { _ in nil })
+        let ok = await store.setAsideUnreadableWorkspace()
+        XCTAssertTrue(ok)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repository.workspaceURL.path))
+
+        let archived = try FileManager.default
+            .contentsOfDirectory(atPath: repository.workspaceURL.deletingLastPathComponent().path)
+            .filter { $0.hasPrefix("workspace-unreadable-") }
+        XCTAssertEqual(archived.count, 1, "The unreadable file must be kept, not deleted.")
+        let kept = try Data(contentsOf: repository.workspaceURL
+            .deletingLastPathComponent().appendingPathComponent(archived[0]))
+        XCTAssertEqual(kept, corrupt,
+                       "The bytes may still be recoverable with a key from another Mac.")
+    }
 }
