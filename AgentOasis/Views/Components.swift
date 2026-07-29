@@ -1,13 +1,150 @@
+import AppKit
 import Charts
 import SwiftUI
 
+/// Colour roles for Agent Oasis.
+///
+/// The previous palette was six fixed RGB triples that rendered identically in light and dark
+/// mode, so dark mode got light-mode's saturation and everything sat flat on an opaque panel.
+/// These adapt per appearance, and the semantic names below (`cash`, `modeled`) exist because
+/// this app's central distinction is between money that moved and money someone estimated -
+/// if that difference is real it should be visible before a label is read.
 enum OasisPalette {
-    static let teal = Color(red: 0.06, green: 0.51, blue: 0.62)
-    static let coral = Color(red: 0.88, green: 0.30, blue: 0.27)
-    static let gold = Color(red: 0.88, green: 0.65, blue: 0.16)
-    static let green = Color(red: 0.20, green: 0.64, blue: 0.38)
-    static let ink = Color(red: 0.09, green: 0.11, blue: 0.13)
-    static let indigo = Color(red: 0.31, green: 0.35, blue: 0.70)
+    private static func adaptive(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let (r, g, b) = isDark ? dark : light
+            return NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
+        })
+    }
+
+    static let teal = adaptive(light: (0.05, 0.47, 0.58), dark: (0.36, 0.79, 0.88))
+    static let coral = adaptive(light: (0.83, 0.27, 0.24), dark: (1.00, 0.48, 0.44))
+    static let gold = adaptive(light: (0.76, 0.55, 0.09), dark: (0.99, 0.80, 0.36))
+    static let green = adaptive(light: (0.13, 0.55, 0.32), dark: (0.42, 0.85, 0.57))
+    static let indigo = adaptive(light: (0.28, 0.31, 0.68), dark: (0.62, 0.65, 0.99))
+    static let ink = adaptive(light: (0.09, 0.11, 0.13), dark: (0.93, 0.94, 0.96))
+
+    /// Money that actually moved.
+    static let cash = green
+    /// Estimated value. Deliberately a different hue family from cash, never a shade of it.
+    static let modeled = indigo
+
+    static func accentGradient(_ base: Color) -> LinearGradient {
+        LinearGradient(
+            colors: [base.opacity(0.95), base.opacity(0.62)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+/// Shared geometry. One place, so panels, tiles and badges stay on the same rhythm.
+enum OasisMetrics {
+    static let corner: CGFloat = 14
+    static let tightCorner: CGFloat = 10
+    static let panelPadding: CGFloat = 18
+    static let gutter: CGFloat = 16
+}
+
+extension View {
+    /// The standard raised surface: material, hairline, soft shadow, continuous corners.
+    func oasisSurface(
+        corner: CGFloat = OasisMetrics.corner,
+        elevated: Bool = true
+    ) -> some View {
+        background(.regularMaterial, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(.separator.opacity(0.35), lineWidth: 0.5)
+            )
+            .shadow(
+                color: .black.opacity(elevated ? 0.16 : 0),
+                radius: elevated ? 14 : 0,
+                x: 0,
+                y: elevated ? 6 : 0
+            )
+    }
+}
+
+/// Says where a number came from, in one glance.
+///
+/// This is the whole audit finding rendered as a control. An ROI figure with no provenance
+/// beside it invites a reader to treat a typed hourly rate exactly like an imported invoice,
+/// and the fix is not a disclaimer in the docs - it is making the difference impossible to
+/// miss at the point the number is read.
+struct ProvenanceBadge: View {
+    let provenance: ValueProvenance
+    var compact: Bool = false
+
+    private var tint: Color { provenance == .measured ? OasisPalette.cash : OasisPalette.modeled }
+
+    var body: some View {
+        Label {
+            if !compact { Text(provenance.title) }
+        } icon: {
+            Image(systemName: provenance == .measured
+                ? "checkmark.seal.fill"
+                : "pencil.and.outline")
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(tint)
+        .padding(.horizontal, compact ? 5 : 8)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.14), in: Capsule())
+        .overlay(Capsule().strokeBorder(tint.opacity(0.28), lineWidth: 0.5))
+        .help(provenance.explanation)
+        .accessibilityLabel("\(provenance.title). \(provenance.explanation)")
+    }
+}
+
+/// A confidence read-out that always shows its reasoning.
+///
+/// The old score was activity dressed as certainty, so the number alone was the problem.
+/// Showing the sentence that produced it means a reader can disagree with it.
+struct EvidenceMeter: View {
+    let confidence: Double
+    let reason: String
+
+    private var tint: Color {
+        switch confidence {
+        case ..<0.01: OasisPalette.coral
+        case ..<0.5: OasisPalette.gold
+        default: OasisPalette.cash
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("Evidence")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text(confidence < 0.01 ? "None" : OasisFormat.percent(confidence))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(tint)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary)
+                    Capsule()
+                        .fill(OasisPalette.accentGradient(tint))
+                        .frame(width: max(0, geo.size.width * confidence))
+                }
+            }
+            .frame(height: 5)
+            Text(reason)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
 }
 
 struct PageHeader: View {
@@ -30,7 +167,8 @@ struct PageHeader: View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 25, weight: .semibold))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(OasisPalette.ink)
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -50,47 +188,73 @@ struct OasisPanel<Content: View>: View {
 
     var body: some View {
         content
-            .padding(16)
-            .background(.background.opacity(0.78))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(.separator.opacity(0.55), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(OasisMetrics.panelPadding)
+            .oasisSurface()
     }
 }
 
+/// A headline figure.
+///
+/// `provenance` is optional but is the point of the component: a tile showing money that
+/// moved and a tile showing money someone estimated used to be visually identical, which is
+/// how an estimate ends up quoted as a result. When provenance is supplied the tile carries
+/// its badge, and estimated tiles get a different accent family rather than a paler version
+/// of the same one - a shade reads as "less of the same thing", not "a different kind of
+/// thing".
 struct MetricTile: View {
     let title: String
     let value: String
     let detail: String
     let systemImage: String
     let color: Color
+    var provenance: ValueProvenance?
+
+    @State private var hovering = false
 
     var body: some View {
-        OasisPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Label(title, systemImage: systemImage)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Circle()
-                        .fill(color)
-                        .frame(width: 8, height: 8)
-                        .accessibilityHidden(true)
-                }
-                Text(value)
-                    .font(.system(size: 26, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                Text(detail)
-                    .font(.caption)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(OasisPalette.accentGradient(color))
+                    .frame(width: 26, height: 26)
+                    .background(color.opacity(0.14), in: RoundedRectangle(
+                        cornerRadius: 8, style: .continuous))
+                Text(title)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .frame(minHeight: 28, alignment: .topLeading)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let provenance {
+                    ProvenanceBadge(provenance: provenance, compact: true)
+                }
             }
+            Text(value)
+                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(OasisPalette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+                .contentTransition(.numericText())
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(minHeight: 28, alignment: .topLeading)
         }
+        .padding(OasisMetrics.panelPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .oasisSurface()
+        .overlay(alignment: .top) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(OasisPalette.accentGradient(color))
+                .frame(height: 3)
+                .padding(.horizontal, 14)
+                .opacity(hovering ? 1 : 0.75)
+        }
+        .scaleEffect(hovering ? 1.012 : 1)
+        .animation(.spring(response: 0.32, dampingFraction: 0.72), value: hovering)
+        .onHover { hovering = $0 }
     }
 }
 

@@ -102,7 +102,7 @@ private struct ExperimentDetailView: View {
     }
 
     private var lift: Double? {
-        AnalyticsEngine.experimentLift(draft)
+        AnalyticsEngine.attribution(for: draft).lift
     }
 
     var body: some View {

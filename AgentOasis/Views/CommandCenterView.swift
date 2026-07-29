@@ -14,7 +14,7 @@ struct CommandCenterView: View {
     private var sortedAgents: [AgentEconomics] {
         store.workspace.agents
             .map(AnalyticsEngine.agentEconomics)
-            .sorted { $0.netValue > $1.netValue }
+            .sorted { $0.cashNetValue > $1.cashNetValue }
     }
 
     var body: some View {
@@ -44,7 +44,7 @@ struct CommandCenterView: View {
                     )
                     MetricTile(
                         title: "Agent net value",
-                        value: OasisFormat.currency(summary.agentNetValue),
+                        value: OasisFormat.currency(summary.agentCashNetValue),
                         detail: "Capacity + revenue + avoided spend - cost",
                         systemImage: "cpu",
                         color: OasisPalette.indigo
@@ -171,14 +171,14 @@ struct CommandCenterView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(economics.name)
                                                 .fontWeight(.medium)
-                                            Text("Confidence \(OasisFormat.percent(economics.confidence))")
+                                            Text(economics.confidence < 0.01 ? "No evidence" : "Evidence \(OasisFormat.percent(economics.confidence))")
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
                                         Spacer()
                                         VStack(alignment: .trailing, spacing: 2) {
-                                            Text(OasisFormat.currency(economics.netValue))
-                                            Text(economics.roi.map {
+                                            Text(OasisFormat.currency(economics.cashNetValue))
+                                            Text(economics.cashROI.map {
                                                 "\(OasisFormat.percent($0)) ROI"
                                             } ?? "Cost not entered")
                                                 .font(.caption)
@@ -203,7 +203,8 @@ struct CommandCenterView: View {
         var signals: [PrioritySignal] = []
         let running = store.workspace.experiments.filter { $0.status == .running }
         for experiment in running.prefix(2) {
-            let lift = AnalyticsEngine.experimentLift(experiment)
+            let attribution = AnalyticsEngine.attribution(for: experiment)
+            let lift = attribution.lift
             signals.append(
                 PrioritySignal(
                     title: experiment.title,

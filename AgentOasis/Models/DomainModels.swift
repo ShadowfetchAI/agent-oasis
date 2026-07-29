@@ -127,6 +127,59 @@ enum AgentStatus: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Where a value figure came from.
+///
+/// This exists because Agent Oasis reports ROI, and three of the four terms that feed ROI
+/// used to be numbers a human typed into a sheet. A typed number and a measured one are not
+/// the same kind of fact, and the moment they are added together the result inherits the
+/// weaker of the two while looking as precise as the stronger. Every value input now carries
+/// its own provenance so the analytics layer can keep them apart instead of averaging away
+/// the difference.
+enum ValueProvenance: String, Codable, CaseIterable, Identifiable, Hashable {
+    /// Came from a connector, an import, or an observed record. Re-derivable.
+    case measured
+    /// A person typed it. Possibly excellent, but it is a judgement, not an observation.
+    case estimated
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .measured: "Measured"
+        case .estimated: "Estimated"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .measured: "Imported or observed. Can be re-derived from a source."
+        case .estimated: "Entered by hand. A judgement, not an observation."
+        }
+    }
+}
+
+/// Provenance for each of the four value inputs behind an agent's economics.
+///
+/// Optional on `AgentProfile` so workspaces written before this existed still decode: Swift's
+/// synthesized decoder uses `decodeIfPresent` for Optionals but throws on a missing key for a
+/// non-Optional with a default. A silently unreadable workspace would be a far worse bug than
+/// the one this type fixes.
+struct AgentValueBasis: Codable, Hashable {
+    var equivalentHumanHours: ValueProvenance = .estimated
+    var loadedHourlyRate: ValueProvenance = .estimated
+    var directRevenueInfluenced: ValueProvenance = .estimated
+    var avoidedVendorSpend: ValueProvenance = .estimated
+
+    static let allEstimated = AgentValueBasis()
+
+    var measuredCount: Int {
+        [equivalentHumanHours, loadedHourlyRate, directRevenueInfluenced, avoidedVendorSpend]
+            .filter { $0 == .measured }.count
+    }
+
+    var total: Int { 4 }
+}
+
 struct AgentProfile: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
@@ -153,6 +206,16 @@ struct AgentProfile: Identifiable, Codable, Hashable {
     var lastSeen: Date?
     var source: String
     var tags: [String]
+
+    /// Optional for backward compatibility - see AgentValueBasis. Read through `basis`.
+    var valueBasis: AgentValueBasis?
+
+    /// Provenance of this agent's four value inputs, defaulting to all-estimated.
+    ///
+    /// All-estimated is the correct default for a workspace that predates provenance: those
+    /// numbers WERE typed by hand, so claiming otherwise would be inventing evidence in the
+    /// name of a feature that exists to stop exactly that.
+    var basis: AgentValueBasis { valueBasis ?? .allEstimated }
 }
 
 enum LedgerEntryType: String, Codable, CaseIterable, Identifiable {

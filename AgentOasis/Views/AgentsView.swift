@@ -101,7 +101,7 @@ private struct AgentRow: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(OasisFormat.currency(economics.netValue))
+                Text(OasisFormat.currency(economics.cashNetValue))
                     .font(.caption.weight(.medium))
                 Text("\(agent.sessions) sessions")
                     .font(.caption2)
@@ -163,15 +163,15 @@ private struct AgentDetailView: View {
                     )
                     MetricTile(
                         title: "Capacity value",
-                        value: OasisFormat.currency(economics.capacityValue),
+                        value: OasisFormat.currency(economics.modeledCapacityValue),
                         detail: "Equivalent hours x loaded rate",
                         systemImage: "hourglass",
                         color: OasisPalette.indigo
                     )
                     MetricTile(
                         title: "Net agent value",
-                        value: OasisFormat.currency(economics.netValue),
-                        detail: economics.roi.map { "\(OasisFormat.percent($0)) modeled ROI" }
+                        value: OasisFormat.currency(economics.modeledNetValue),
+                        detail: economics.modeledROI.map { "\(OasisFormat.percent($0)) modeled ROI" }
                             ?? "Enter cost to calculate ROI",
                         systemImage: "chart.line.uptrend.xyaxis",
                         color: OasisPalette.green
@@ -192,13 +192,13 @@ private struct AgentDetailView: View {
                                 "Value decomposition",
                                 subtitle: "Each kind of value remains independently visible"
                             )
-                            ValueLine("Capacity value", value: economics.capacityValue, color: OasisPalette.indigo)
-                            ValueLine("Direct revenue influence", value: economics.directRevenue, color: OasisPalette.green)
-                            ValueLine("Avoided vendor spend", value: economics.avoidedSpend, color: OasisPalette.teal)
+                            ValueLine("Capacity value (modeled)", value: economics.modeledCapacityValue, color: OasisPalette.modeled)
+                            ValueLine("Direct revenue influence", value: economics.cashRevenue + economics.modeledRevenue, color: OasisPalette.green)
+                            ValueLine("Avoided vendor spend", value: economics.modeledAvoidedSpend, color: OasisPalette.teal)
                             Divider()
                             ValueLine("Direct operating cost", value: -economics.directCost, color: OasisPalette.coral)
                             Divider()
-                            ValueLine("Modeled net value", value: economics.netValue, color: OasisPalette.gold, bold: true)
+                            ValueLine("Modeled net value", value: economics.modeledNetValue, color: OasisPalette.modeled, bold: true)
                             Text("Capacity value describes productive capacity. It is not automatically cash saved.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -224,7 +224,9 @@ private struct AgentDetailView: View {
                             )
                             ReliabilityLine(
                                 label: "Model confidence",
-                                value: OasisFormat.percent(economics.confidence)
+                                value: economics.confidence < 0.01
+                                    ? "None"
+                                    : OasisFormat.percent(economics.confidence)
                             )
                         }
                     }
