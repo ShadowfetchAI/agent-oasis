@@ -27,6 +27,12 @@ settings:
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
     Release:
       SWIFT_OPTIMIZATION_LEVEL: "-O"
+      # Xcode injects com.apple.security.get-task-allow for development-signed builds, and it
+      # was present in the shipped Release product - verified with `codesign -d --entitlements`.
+      # That entitlement lets ANY process running as the user attach a debugger and read the
+      # workspace key straight out of memory, which defeats the Keychain, the owner gate and
+      # the encryption all at once. It also makes a hardened-runtime build fail notarization.
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
 
 targets:
   AgentOasis:

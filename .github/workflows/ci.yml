@@ -46,3 +46,27 @@ jobs:
             echo "::error::Swift warnings are not allowed."
             exit 1
           fi
+
+      - name: Release build must not be debuggable
+        # com.apple.security.get-task-allow was present in the shipped Release product. It
+        # lets any process running as the user attach a debugger and read the workspace key
+        # out of memory, defeating the Keychain and the owner gate at once - and it fails
+        # notarization under hardened runtime. This is a build setting, so only a build-output
+        # check can catch it coming back.
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project AgentOasis.xcodeproj \
+            -scheme AgentOasis \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath ReleaseDD \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          APP=$(find ReleaseDD/Build/Products/Release -maxdepth 1 -name "*.app" | head -1)
+          if [ -z "$APP" ]; then echo "::error::No Release .app produced"; exit 1; fi
+          if codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "get-task-allow"; then
+            echo "::error::Release product carries com.apple.security.get-task-allow"
+            exit 1
+          fi
+          echo "Release entitlements clean."

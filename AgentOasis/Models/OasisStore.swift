@@ -35,6 +35,9 @@ final class OasisStore: ObservableObject {
     /// Set when storage could not be created. Non-nil means the app cannot persist anything.
     @Published private(set) var startupFailure: String?
 
+    /// True when the last save failed and the in-memory workspace is ahead of the disk.
+    @Published private(set) var hasUnsavedChanges = false
+
     /// A workspace file exists but cannot be decrypted with this Mac's key.
     ///
     /// Drives the locked-screen recovery route. Distinguishing this from "wrong finger" is
@@ -276,7 +279,19 @@ final class OasisStore: ObservableObject {
             entityName: workspace.name,
             summary: reason
         )
-        persist()
+        // DO NOT DISCARD WORK THE DISK NEVER RECEIVED.
+        //
+        // Auto-lock is not a user decision: it fires from an idle timer, from system sleep and
+        // from screen lock. Clearing `workspace` after a failed save meant a full disk or an
+        // unmounted volume silently threw away everything since the last good write, with
+        // nobody at the keyboard to see the alert. Staying unlocked is the lesser harm - the
+        // Mac's own screen lock is already protecting the screen in the cases that matter.
+        guard persist() else {
+            errorMessage = "Agent Oasis could not save your workspace, so it stayed unlocked "
+                + "rather than discard unsaved changes. Free some space or reconnect the "
+                + "drive, then export a backup from the Vault."
+            return
+        }
         key = nil
         workspace = .empty
         lockState = .locked
@@ -458,6 +473,16 @@ final class OasisStore: ObservableObject {
         panel.allowedContentTypes = []
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        // runModal spins a nested run loop in NSModalPanelRunLoopMode, which belongs to
+        // .common - so the idle timer, sleep and screen-lock handlers all run INSIDE this
+        // call and lock() can complete between the guard above and the write below. Without
+        // re-checking, a locked app still writes the plaintext it prepared before the panel
+        // opened, and the audit row recording that export is appended into an emptied
+        // workspace and lost at the next unlock.
+        guard isUnlocked, key != nil else {
+            errorMessage = WorkspaceSecurityError.workspaceLocked.localizedDescription
+            return
+        }
         do {
             let data = try requireRepository().encryptedBackupData()
             try data.write(to: url, options: .atomic)
@@ -821,6 +846,16 @@ final class OasisStore: ObservableObject {
         panel.nameFieldStringValue = suggestedName
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        // runModal spins a nested run loop in NSModalPanelRunLoopMode, which belongs to
+        // .common - so the idle timer, sleep and screen-lock handlers all run INSIDE this
+        // call and lock() can complete between the guard above and the write below. Without
+        // re-checking, a locked app still writes the plaintext it prepared before the panel
+        // opened, and the audit row recording that export is appended into an emptied
+        // workspace and lost at the next unlock.
+        guard isUnlocked, key != nil else {
+            errorMessage = WorkspaceSecurityError.workspaceLocked.localizedDescription
+            return
+        }
         do {
             try data.write(to: url, options: .atomic)
             appendAudit(
@@ -860,13 +895,23 @@ final class OasisStore: ObservableObject {
         )
     }
 
-    private func persist() {
-        guard let key else { return }
+    /// Write the workspace. Returns false when the save did not land.
+    ///
+    /// This used to return Void and turn every write error into a transient banner, so
+    /// `lock()` could not tell a failed save from a good one and cleared `key` and
+    /// `workspace` regardless. Auto-lock is not a user action - it fires from a 30s idle
+    /// timer, from `willSleepNotification` and from screen lock - so on a full disk or an
+    /// unmounted volume an hour of edits was discarded with nobody present to read the alert.
+    @discardableResult
+    private func persist() -> Bool {
+        guard let key else { return false }
         do {
             try requireRepository().save(workspace, using: key)
         } catch {
             errorMessage = "Agent Oasis could not save the encrypted workspace: \(error.localizedDescription)"
         }
+        hasUnsavedChanges = false
+        return true
     }
 
     private static func normalizedAgentName(_ value: String) -> String {

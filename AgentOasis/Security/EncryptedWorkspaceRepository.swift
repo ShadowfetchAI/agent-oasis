@@ -64,7 +64,17 @@ struct EncryptedWorkspaceRepository {
             try? FileManager.default.removeItem(at: temporary)
             throw error
         }
-        _ = try FileManager.default.replaceItemAt(workspaceURL, withItemAt: temporary)
+        // backupItemName is what keeps the OUTGOING file. Without it replaceItemAt unlinks
+        // the current workspace permanently, so restoring last month's backup silently
+        // destroyed every ledger entry, vault item and observation recorded since - while
+        // Settings told the user "the backup is validated before the current workspace
+        // changes", which is true and reads as a promise the old file is safe. It was not.
+        _ = try FileManager.default.replaceItemAt(
+            workspaceURL,
+            withItemAt: temporary,
+            backupItemName: "workspace-previous.aovault",
+            options: [.withoutDeletingBackupItem]
+        )
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o600],
             ofItemAtPath: workspaceURL.path

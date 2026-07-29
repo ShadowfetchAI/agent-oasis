@@ -114,7 +114,7 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -destination 'platform=macOS' test
 ```
 
-40 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
+44 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
 the App Store Connect JWT, the delimited-text importers, and the provenance rules above —
 including that a fully-estimated agent reports zero confidence, that a workspace written
 before provenance existed decodes as estimated rather than silently claiming measurement, that

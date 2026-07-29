@@ -9,13 +9,25 @@ enum DelimitedTextParser {
             guard values.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
                 return nil
             }
-            return Dictionary(uniqueKeysWithValues: headers.enumerated().map { index, header in
+            // uniqueKeysWithValues TRAPS on a duplicate key - SIGTRAP, not a thrown error, so
+            // the do/catch around the import cannot save it and the app dies outright. It
+            // needs no malformed file: a header line ending in two delimiters ("Date,Units,,")
+            // produces two "" keys, and that is exactly what Excel, Numbers and Sheets emit
+            // for trailing empty columns. Both file pickers accept any file type, and this
+            // parse runs before any format sniffing, so choosing the wrong file was enough to
+            // kill the process.
+            //
+            // Blank headers are dropped and the first of any duplicate pair wins, which is
+            // already how value(in:keys:) resolves columns downstream.
+            let pairs = headers.enumerated().compactMap { index, header -> (String, String)? in
                 let key = header.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !key.isEmpty else { return nil }
                 let value = index < values.count
                     ? values[index].trimmingCharacters(in: .whitespacesAndNewlines)
                     : ""
                 return (key, value)
-            })
+            }
+            return Dictionary(pairs, uniquingKeysWith: { first, _ in first })
         }
     }
 
