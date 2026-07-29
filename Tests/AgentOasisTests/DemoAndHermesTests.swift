@@ -37,4 +37,52 @@ final class DemoAndHermesTests: XCTestCase {
             result.agents[0].totalTokensReported
         )
     }
+
+    /// The fleet paths are interpolated into a remote shell command, so they are an injection
+    /// surface exactly like the hostname. Making them configurable created this risk; the
+    /// validation is what makes the feature safe rather than merely flexible.
+    func testFleetLayoutRejectsInjectionAndEscape() async {
+        let bad = [
+            "../../etc",                     // escapes $HOME
+            "/etc/passwd",                   // absolute
+            "profiles; rm -rf ~",            // command separator
+            "profiles$(whoami)",             // substitution
+            "profiles`id`",                  // backticks
+            "profiles with space",
+            ""
+        ]
+        for path in bad {
+            do {
+                _ = try await HermesConnector.fetchFleetSnapshot(
+                    host: "example", profilesPath: path)
+                XCTFail("Accepted a dangerous profiles path: \(path)")
+            } catch let error as HermesConnectorError {
+                guard case .invalidLayout = error else {
+                    return XCTFail("Wrong rejection for \(path): \(error)")
+                }
+            } catch {
+                // A connection failure means validation passed and it tried to run - a fail.
+                XCTFail("Path \(path) reached the network layer")
+            }
+        }
+    }
+
+    /// An empty result must say what it looked for, not just "malformed".
+    func testEmptyFleetNamesTheSearchedPath() {
+        do {
+            _ = try HermesConnector.parse("", searchedPath: "custom/agents")
+            XCTFail("Empty telemetry should not parse")
+        } catch let error as HermesConnectorError {
+            guard case .noProfilesFound(let searched) = error else {
+                return XCTFail("Expected .noProfilesFound, got \(error)")
+            }
+            XCTAssertEqual(searched, "custom/agents")
+            XCTAssertTrue(
+                error.errorDescription?.contains("custom/agents") == true,
+                "The message a user reads must name the directory that was searched."
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }

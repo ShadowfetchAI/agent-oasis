@@ -39,7 +39,7 @@ its caveat. The raw arithmetic is still available to anyone who explicitly asks 
 - Cash and modelled-value ledger with per-entry confidence
 - Experiment timeline with baselines, confounders and honest attribution
 - Per-agent cost, supervision, capacity, revenue influence and ROI — split by provenance
-- Read-only fleet telemetry over an SSH alias
+- Read-only fleet telemetry over an SSH alias, with a configurable profiles path
 - Encrypted secret vault and a metadata-only credential inventory
 - Owner-authenticated encrypted backup, recovery key, plaintext CSV export
 - Append-only audit trail that never records secret values
@@ -91,9 +91,8 @@ Stated plainly, because a security section that only lists strengths is marketin
 - **The app is not sandboxed.** It spawns `/usr/bin/ssh` for fleet telemetry, which the
   sandbox forbids. This is a deliberate trade for a directly-distributed tool and it is why
   Agent Oasis is not a Mac App Store app.
-- **Fleet telemetry is coupled to one layout.** `HermesConnector` expects
-  `~/.hermes-shadowfetch/profiles` and `hermes-gw@*.service`. It will find nothing on a
-  machine organised differently.
+- **The Touch ID gate is not bound to the key.** See above — this is the most meaningful
+  remaining gap.
 
 ## Tests
 
@@ -102,10 +101,11 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -destination 'platform=macOS' test
 ```
 
-23 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
+25 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
 the App Store Connect JWT, the delimited-text importers, and the provenance rules above —
-including that a fully-estimated agent reports zero confidence and that a workspace written
-before provenance existed decodes as estimated rather than silently claiming measurement.
+including that a fully-estimated agent reports zero confidence, that a workspace written
+before provenance existed decodes as estimated rather than silently claiming measurement, and
+that the configurable fleet paths reject shell injection and `..` escapes.
 
 ## Licence
 

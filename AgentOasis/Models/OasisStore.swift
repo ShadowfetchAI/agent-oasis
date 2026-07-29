@@ -397,7 +397,9 @@ final class OasisStore: ObservableObject {
         defer { isSyncingHermes = false }
         do {
             let snapshot = try await HermesConnector.fetchFleetSnapshot(
-                host: workspace.settings.remoteHermesHost
+                host: workspace.settings.remoteHermesHost,
+                profilesPath: workspace.settings.hermesProfilesPath,
+                gatewayUnitPattern: workspace.settings.hermesGatewayUnitPattern
             )
             mutate(
                 category: "Connection",

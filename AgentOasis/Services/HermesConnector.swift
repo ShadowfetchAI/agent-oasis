@@ -22,13 +22,21 @@ struct HermesFleetSnapshot: Hashable {
 
 enum HermesConnectorError: LocalizedError {
     case invalidHost
+    case invalidLayout
     case commandFailed(String)
     case malformedResponse
+    case noProfilesFound(searched: String)
 
     var errorDescription: String? {
         switch self {
         case .invalidHost:
             "The SSH host must contain only letters, numbers, dots, underscores, or hyphens."
+        case .invalidLayout:
+            "The fleet paths must be relative and may contain only letters, numbers, dots, "
+                + "underscores, hyphens, slashes, @ and *."
+        case .noProfilesFound(let searched):
+            "No agent profiles were found in ~/\(searched) on the remote host. If your agents "
+                + "live elsewhere, change the profiles path in Settings."
         case .commandFailed(let message):
             "Hermes telemetry failed: \(message)"
         case .malformedResponse:
@@ -38,10 +46,27 @@ enum HermesConnectorError: LocalizedError {
 }
 
 enum HermesConnector {
-    static func fetchFleetSnapshot(host: String) async throws -> HermesFleetSnapshot {
+    static func fetchFleetSnapshot(
+        host: String,
+        profilesPath: String = ".hermes-shadowfetch/profiles",
+        gatewayUnitPattern: String = "hermes-gw@*.service"
+    ) async throws -> HermesFleetSnapshot {
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
         guard !host.isEmpty, host.unicodeScalars.allSatisfy(allowed.contains) else {
             throw HermesConnectorError.invalidHost
+        }
+
+        // These are interpolated into a command that runs on the remote host, so they are an
+        // injection surface exactly like the hostname is. Slashes are allowed because a path
+        // needs them; quotes, spaces, $ and backticks are not.
+        let pathAllowed = allowed.union(CharacterSet(charactersIn: "/@*"))
+        guard !profilesPath.isEmpty,
+              profilesPath.unicodeScalars.allSatisfy(pathAllowed.contains),
+              !profilesPath.hasPrefix("/"),
+              !profilesPath.contains(".."),
+              !gatewayUnitPattern.isEmpty,
+              gatewayUnitPattern.unicodeScalars.allSatisfy(pathAllowed.contains) else {
+            throw HermesConnectorError.invalidLayout
         }
 
         let remoteCommand = #"""
@@ -50,14 +75,14 @@ if [ -z "$HERMES_BIN" ] && [ -x "$HOME/.local/bin/hermes" ]; then HERMES_BIN="$H
 printf 'VERSION\t'
 if [ -n "$HERMES_BIN" ]; then "$HERMES_BIN" --version 2>/dev/null | head -1; else printf 'Unavailable\n'; fi
 printf 'PROFILE_COUNT\t'
-find "$HOME/.hermes-shadowfetch/profiles" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '
+find "$HOME/\#(profilesPath)" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '
 printf '\nACTIVE_GATEWAYS\t'
-systemctl --user list-units 'hermes-gw@*.service' --state=running --no-legend 2>/dev/null | wc -l | tr -d ' '
+systemctl --user list-units '\#(gatewayUnitPattern)' --state=running --no-legend 2>/dev/null | wc -l | tr -d ' '
 printf '\nKANBAN\t'
 if [ -n "$HERMES_BIN" ]; then "$HERMES_BIN" kanban stats 2>/dev/null | tr '\n' ' ' | tr '\t' ' '; fi
 printf '\n'
-ACTIVE_NAMES="$(systemctl --user list-units 'hermes-gw@*.service' --state=running --no-legend 2>/dev/null | sed -n 's/.*hermes-gw@\([^ ]*\)\.service.*/\1/p')"
-for PROFILE in "$HOME/.hermes-shadowfetch/profiles"/*; do
+ACTIVE_NAMES="$(systemctl --user list-units '\#(gatewayUnitPattern)' --state=running --no-legend 2>/dev/null | sed -n 's/.*hermes-gw@\([^ ]*\)\.service.*/\1/p')"
+for PROFILE in "$HOME/\#(profilesPath)"/*; do
   [ -d "$PROFILE" ] || continue
   NAME="$(basename "$PROFILE")"
   ACTIVE=0
@@ -92,10 +117,13 @@ done
         guard result.status == 0 else {
             throw HermesConnectorError.commandFailed(result.error.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        return try parse(result.output)
+        return try parse(result.output, searchedPath: profilesPath)
     }
 
-    static func parse(_ output: String) throws -> HermesFleetSnapshot {
+    static func parse(
+        _ output: String,
+        searchedPath: String = ".hermes-shadowfetch/profiles"
+    ) throws -> HermesFleetSnapshot {
         var version = "Unknown"
         var profileCount = 0
         var activeGateways = 0
@@ -134,7 +162,7 @@ done
         }
 
         guard profileCount > 0 || !agents.isEmpty else {
-            throw HermesConnectorError.malformedResponse
+            throw HermesConnectorError.noProfilesFound(searched: searchedPath)
         }
         return HermesFleetSnapshot(
             fetchedAt: Date(),

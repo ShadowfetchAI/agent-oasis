@@ -483,6 +483,17 @@ struct WorkspaceSettings: Codable, Hashable {
     var baseCurrency = "USD"
     var autoLockMinutes = 15
     var remoteHermesHost = "shadowfetch-linux"
+
+    /// Where agent profiles live on the remote host, relative to $HOME.
+    ///
+    /// Was hardcoded inside the remote shell script, which meant Agent Oasis found agents on
+    /// exactly one machine in the world. Anyone else cloning this repo opened the fleet panel,
+    /// saw nothing, and had no way to know the tool had looked in a directory they have never
+    /// heard of. Configurable, and the empty state now names what it searched.
+    var hermesProfilesPath = ".hermes-shadowfetch/profiles"
+
+    /// systemd --user unit pattern for a running agent gateway.
+    var hermesGatewayUnitPattern = "hermes-gw@*.service"
     var showCapacityValueInHeadline = false
     var includeDemoData = true
 }
