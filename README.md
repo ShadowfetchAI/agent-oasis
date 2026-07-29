@@ -50,6 +50,8 @@ No signed binary release yet. Agent Oasis needs a Developer ID certificate to pa
 on someone else's Mac, and shipping an unsigned build that dies at a security warning is worse
 than shipping none. **Build from source for now** — it takes about a minute.
 
+See [SETUP.md](SETUP.md) for App Store Connect, fleet telemetry and backups.
+
 ## Build
 
 Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
@@ -97,8 +99,13 @@ Stated plainly, because a security section that only lists strengths is marketin
 - **The app is not sandboxed.** It spawns `/usr/bin/ssh` for fleet telemetry, which the
   sandbox forbids. This is a deliberate trade for a directly-distributed tool and it is why
   Agent Oasis is not a Mac App Store app.
-- **The Touch ID gate is not bound to the key.** See above — this is the most meaningful
-  remaining gap.
+- **The strong Keychain class needs a signed build.** The workspace key is bound to owner
+  presence (`SecAccessControl` with `.userPresence`) and the authenticated `LAContext` from
+  the unlock prompt is handed to the Keychain, so the gate protects the key rather than only
+  the window. This requires the data protection keychain, which needs a `keychain-access-groups`
+  entitlement and a provisioning profile. `KeychainService` probes for it at launch and falls
+  back to the legacy keychain rather than refusing to open your ledger — so **an unsigned
+  build gets the weaker protection**. Build signed with your own team for the full model.
 
 ## Tests
 

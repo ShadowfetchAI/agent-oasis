@@ -1,6 +1,7 @@
 name: AgentOasis
 options:
-  bundleIdPrefix: com.realbobcorbin
+  # Override with AGENT_OASIS_BUNDLE_PREFIX to ship your own build.
+  bundleIdPrefix: ${AGENT_OASIS_BUNDLE_PREFIX}
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -11,7 +12,11 @@ settings:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
-    DEVELOPMENT_TEAM: "MJ53Q33F9P"
+    # Empty by default so a clone builds for anyone. Set AGENT_OASIS_DEVELOPMENT_TEAM in
+    # your environment (or pass DEVELOPMENT_TEAM=... to xcodebuild) to sign with your own
+    # Apple team. Hardcoding one person's team ID is what makes an open source Xcode project
+    # un-buildable for everybody else.
+    DEVELOPMENT_TEAM: ${AGENT_OASIS_DEVELOPMENT_TEAM}
     # 'targeted' surfaces real data races in the @Published store and its async
     # work. 'minimal' silenced the diagnostics rather than the races.
     SWIFT_STRICT_CONCURRENCY: targeted
@@ -33,7 +38,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Agent Oasis
-        PRODUCT_BUNDLE_IDENTIFIER: com.realbobcorbin.AgentOasis
+        PRODUCT_BUNDLE_IDENTIFIER: ${AGENT_OASIS_BUNDLE_PREFIX}.AgentOasis
         INFOPLIST_FILE: AgentOasis/Info.plist
         CODE_SIGN_ENTITLEMENTS: AgentOasis/AgentOasis.entitlements
         CODE_SIGN_STYLE: Automatic
@@ -67,5 +72,5 @@ targets:
     settings:
       base:
         PRODUCT_NAME: AgentOasisTests
-        PRODUCT_BUNDLE_IDENTIFIER: com.realbobcorbin.AgentOasisTests
+        PRODUCT_BUNDLE_IDENTIFIER: ${AGENT_OASIS_BUNDLE_PREFIX}.AgentOasisTests
         GENERATE_INFOPLIST_FILE: YES

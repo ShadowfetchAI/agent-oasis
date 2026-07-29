@@ -1,0 +1,11 @@
+# Copy to .envrc (gitignored) or export these before `xcodegen generate`.
+#
+# Leave both unset to build unsigned - that is enough to run the app locally and to run the
+# test suite, and it is what CI does.
+
+# Your Apple Developer Team ID, from developer.apple.com > Membership.
+export AGENT_OASIS_DEVELOPMENT_TEAM=
+
+# Reverse-DNS prefix for the bundle identifier. Use your own domain if you plan to
+# distribute a build; anything unique is fine for local use.
+export AGENT_OASIS_BUNDLE_PREFIX=com.example

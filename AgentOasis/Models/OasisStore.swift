@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import CryptoKit
 import Foundation
+import LocalAuthentication
 
 @MainActor
 final class OasisStore: ObservableObject {
@@ -42,12 +43,15 @@ final class OasisStore: ObservableObject {
 #else
             let bypass = false
 #endif
+            // The context that proved the owner is present is handed to the Keychain, so the
+            // key release is gated by the same authentication rather than merely following it.
+            var authContext: LAContext?
             if !bypass {
-                try await DeviceOwnerAuthenticator.authenticate(
+                authContext = try await DeviceOwnerAuthenticator.authenticate(
                     reason: "Unlock your encrypted Agent Oasis workspace."
                 )
             }
-            let loadedKey = try KeychainService.loadOrCreateKey()
+            let loadedKey = try KeychainService.loadOrCreateKey(context: authContext)
             var loaded = try repository.load(using: loadedKey)
             if loaded == nil {
                 loaded = DemoWorkspace.make()

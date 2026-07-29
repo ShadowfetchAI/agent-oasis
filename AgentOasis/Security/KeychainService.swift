@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import LocalAuthentication
 import Security
 
 /// Storage for the 256-bit workspace key.
@@ -68,7 +69,21 @@ enum KeychainService {
         return status == errSecSuccess
     }()
 
-    static func loadOrCreateKey() throws -> SymmetricKey {
+    /// Access control requiring the device owner to be present.
+    ///
+    /// Only meaningful on the data protection keychain; the legacy keychain ignores it, which
+    /// is why `dataProtectionAvailable` gates its use. `.userPresence` accepts Touch ID or the
+    /// Mac password, so a Mac without Touch ID is not locked out of its own workspace.
+    private static func ownerPresenceAccess() -> SecAccessControl? {
+        SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            .userPresence,
+            nil
+        )
+    }
+
+    static func loadOrCreateKey(context: LAContext? = nil) throws -> SymmetricKey {
         guard dataProtectionAvailable else {
             // Legacy keychain only. Same behaviour as before this type was hardened.
             if let data = try loadKeyData(dataProtection: false) {
@@ -86,14 +101,15 @@ enum KeychainService {
             return key
         }
 
-        if let data = try loadKeyData(dataProtection: dataProtectionAvailable) {
+        if let data = try loadKeyData(
+            dataProtection: dataProtectionAvailable, context: context) {
             guard data.count == 32 else { throw WorkspaceSecurityError.invalidKey }
             return SymmetricKey(data: data)
         }
 
         // Legacy keychain. Anything found here predates the migration and is the real key.
         if let legacy = try? loadKeyData(dataProtection: false), legacy.count == 32 {
-            try storeKeyData(legacy)
+            try storeKeyData(legacy, context: context)
             // Only remove the old copy once the new one is provably readable. A failed
             // delete leaves a duplicate, which is recoverable; deleting first and failing
             // to write loses the workspace forever.
@@ -106,7 +122,7 @@ enum KeychainService {
         }
 
         let key = SymmetricKey(size: .bits256)
-        try storeKeyData(key.withUnsafeBytes { Data($0) })
+        try storeKeyData(key.withUnsafeBytes { Data($0) }, context: context)
         return key
     }
 
@@ -139,10 +155,15 @@ enum KeychainService {
         }
     }
 
-    private static func loadKeyData(dataProtection: Bool) throws -> Data? {
+    private static func loadKeyData(
+        dataProtection: Bool,
+        context: LAContext? = nil
+    ) throws -> Data? {
         var query = baseQuery(dataProtection: dataProtection)
         query[kSecReturnData] = true
         query[kSecMatchLimit] = kSecMatchLimitOne
+        // Reuse the proof from the unlock prompt rather than raising a second one.
+        if let context { query[kSecUseAuthenticationContext] = context }
 
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -153,10 +174,17 @@ enum KeychainService {
         return data
     }
 
-    private static func storeKeyData(_ data: Data) throws {
+    private static func storeKeyData(_ data: Data, context: LAContext? = nil) throws {
         var query = baseQuery(dataProtection: dataProtectionAvailable)
-        query[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         query[kSecValueData] = data
+        if let context { query[kSecUseAuthenticationContext] = context }
+        // Bind the key to owner presence where the keychain honours it; fall back to the
+        // plain accessibility class where it does not.
+        if dataProtectionAvailable, let access = ownerPresenceAccess() {
+            query[kSecAttrAccessControl] = access
+        } else {
+            query[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        }
 
         let status = SecItemAdd(query as CFDictionary, nil)
         if status == errSecDuplicateItem {

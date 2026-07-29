@@ -15,3 +15,7 @@ Test Drive/*.zip
 Test Drive/*.app
 
 .DS_Store
+
+# Local, developer-specific build config
+.envrc
+Local.xcconfig
