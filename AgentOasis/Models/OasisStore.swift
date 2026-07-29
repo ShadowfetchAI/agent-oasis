@@ -20,17 +20,83 @@ final class OasisStore: ObservableObject {
     @Published private(set) var isSyncingHermes = false
     @Published private(set) var isSyncingApple = false
 
-    private let repository: EncryptedWorkspaceRepository
+    /// Optional because the app must not die when it cannot create its own storage.
+    ///
+    /// This used to be non-optional and the initialiser called `fatalError` when
+    /// `EncryptedWorkspaceRepository()` threw. On the developer's Mac that never happens. On a
+    /// stranger's it can: Application Support locked down by an MDM profile, a full disk, a
+    /// home directory on a volume that has gone away, or a sandbox/permission refusal. The
+    /// result was an instant crash on launch with no window and no explanation - the worst
+    /// possible first contact with a signed binary, and one the user cannot even report
+    /// usefully. The app now opens, explains what failed and where, and refuses to pretend it
+    /// has a workspace.
+    private let repository: EncryptedWorkspaceRepository?
+
+    /// Set when storage could not be created. Non-nil means the app cannot persist anything.
+    @Published private(set) var startupFailure: String?
+
     private var key: SymmetricKey?
 
     var isUnlocked: Bool { lockState == .unlocked }
-    var workspaceFilePath: String { repository.workspaceURL.path }
+    var workspaceFilePath: String { repository?.workspaceURL.path ?? "unavailable" }
 
-    init(repository: EncryptedWorkspaceRepository? = nil) {
+    /// Storage, or a thrown error describing why there is none.
+    ///
+    /// Every persistence path goes through this, so a broken install fails loudly at the point
+    /// of use with a message a person can act on, instead of silently appearing to work and
+    /// losing the day's edits at the next save.
+    private func requireRepository() throws -> EncryptedWorkspaceRepository {
+        guard let repository else {
+            throw WorkspaceSecurityError.storageUnavailable(startupFailure ?? "unknown reason")
+        }
+        return repository
+    }
+
+    /// How the workspace key is obtained.
+    ///
+    /// Defaults to the real Keychain. Exists so tests can drive the store with a fixed key
+    /// against a temporary directory instead of touching the developer's login keychain -
+    /// without it, every meaningful test of this 689-line type would either need real Touch ID
+    /// or would write to the same Keychain item the running app uses. A test suite that
+    /// mutates your actual workspace key is worse than no test suite.
+    typealias KeyProvider = (LAContext?) throws -> SymmetricKey
+
+    /// How the device owner is proved present.
+    ///
+    /// Seamed for the same reason as the key: `unlock()` authenticates BEFORE it loads the
+    /// key, so injecting only the key still drives a real Touch ID prompt. Writing the first
+    /// test of this type is what surfaced that - the suite sat for 37 seconds waiting on a
+    /// biometric dialog no test process can answer. Production passes the real authenticator
+    /// and behaves exactly as before.
+    typealias OwnerAuthenticator = (String) async throws -> LAContext?
+
+    private let keyProvider: KeyProvider
+    private let ownerAuthenticator: OwnerAuthenticator
+
+    init(
+        repository: EncryptedWorkspaceRepository? = nil,
+        keyProvider: @escaping KeyProvider = { try KeychainService.loadOrCreateKey(context: $0) },
+        ownerAuthenticator: @escaping OwnerAuthenticator = {
+            try await DeviceOwnerAuthenticator.authenticate(reason: $0)
+        }
+    ) {
+        self.keyProvider = keyProvider
+        self.ownerAuthenticator = ownerAuthenticator
+        if let repository {
+            self.repository = repository
+            return
+        }
         do {
-            self.repository = try repository ?? EncryptedWorkspaceRepository()
+            self.repository = try EncryptedWorkspaceRepository()
         } catch {
-            fatalError("Agent Oasis cannot create its local workspace: \(error)")
+            self.repository = nil
+            let support = (try? FileManager.default.url(
+                for: .applicationSupportDirectory, in: .userDomainMask,
+                appropriateFor: nil, create: false
+            ).appendingPathComponent("Agent Oasis").path) ?? "~/Library/Application Support/Agent Oasis"
+            self.startupFailure = "Agent Oasis could not create its workspace folder at "
+                + "\(support). \(error.localizedDescription) "
+                + "Check that the folder is writable, then reopen Agent Oasis."
         }
     }
 
@@ -47,15 +113,19 @@ final class OasisStore: ObservableObject {
             // key release is gated by the same authentication rather than merely following it.
             var authContext: LAContext?
             if !bypass {
-                authContext = try await DeviceOwnerAuthenticator.authenticate(
-                    reason: "Unlock your encrypted Agent Oasis workspace."
+                authContext = try await ownerAuthenticator(
+                    "Unlock your encrypted Agent Oasis workspace."
                 )
             }
-            let loadedKey = try KeychainService.loadOrCreateKey(context: authContext)
-            var loaded = try repository.load(using: loadedKey)
+            let loadedKey = try keyProvider(authContext)
+            let store = try requireRepository()
+            var loaded = try store.load(using: loadedKey)
             if loaded == nil {
-                loaded = DemoWorkspace.make()
-                try repository.save(loaded!, using: loadedKey)
+                // Bind it rather than force-unwrapping: `loaded!` was safe by inspection, but
+                // a data path should not rely on the reader re-deriving that each time.
+                let seeded = DemoWorkspace.make()
+                try store.save(seeded, using: loadedKey)
+                loaded = seeded
             }
             key = loadedKey
             workspace = loaded!
@@ -273,7 +343,7 @@ final class OasisStore: ObservableObject {
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let data = try repository.encryptedBackupData()
+            let data = try requireRepository().encryptedBackupData()
             try data.write(to: url, options: .atomic)
             appendAudit(
                 category: "Backup",
@@ -317,7 +387,7 @@ final class OasisStore: ObservableObject {
             let currentKeyData = currentKey.withUnsafeBytes { Data($0) }
             do {
                 _ = try KeychainService.replaceKey(with: keyData)
-                let restored = try repository.restoreEncryptedBackup(
+                let restored = try requireRepository().restoreEncryptedBackup(
                     backupData,
                     using: candidateKey
                 )
@@ -650,7 +720,7 @@ final class OasisStore: ObservableObject {
     private func persist() {
         guard let key else { return }
         do {
-            try repository.save(workspace, using: key)
+            try requireRepository().save(workspace, using: key)
         } catch {
             errorMessage = "Agent Oasis could not save the encrypted workspace: \(error.localizedDescription)"
         }

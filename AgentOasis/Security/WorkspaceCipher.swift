@@ -54,6 +54,7 @@ enum WorkspaceSecurityError: LocalizedError {
     case unsupportedFormat
     case workspaceLocked
     case invalidBackup
+    case storageUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -71,6 +72,8 @@ enum WorkspaceSecurityError: LocalizedError {
             "Unlock Agent Oasis before performing this operation."
         case .invalidBackup:
             "The selected backup or recovery key is not valid."
+        case .storageUnavailable(let reason):
+            reason
         }
     }
 }

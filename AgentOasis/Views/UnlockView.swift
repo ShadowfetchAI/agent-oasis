@@ -75,6 +75,26 @@ struct UnlockView: View {
                 .disabled(isAuthenticating)
                 .opacity(isAuthenticating ? 0.65 : 1)
 
+                if let failure = store.startupFailure {
+                    // A broken install never gets past this screen, so the explanation has to
+                    // live here rather than in an alert the user dismisses and cannot recall.
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Agent Oasis cannot save anything", systemImage: "exclamationmark.triangle.fill")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(OasisNeon.amber)
+                        Text(failure)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: 460, alignment: .leading)
+                    .background(OasisNeon.amber.opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(OasisNeon.amber.opacity(0.35), lineWidth: 1))
+                }
+
                 VStack(spacing: 9) {
                     assurance("AES-256-GCM encrypted on disk", "lock.shield")
                     assurance("Encryption key held in this Mac's Keychain", "key.fill")

@@ -69,6 +69,13 @@ targets:
       - path: AgentOasis/Services/ImportExportService.swift
       - path: AgentOasis/Services/HermesConnector.swift
       - path: AgentOasis/Services/AppStoreConnectConnector.swift
+      # OasisStore is 689 lines holding every lock, unlock, persist and restore path - the
+      # code most able to lose a user's only copy of their data - and it was not compiled
+      # into the test target at all, so it could not be tested even in principle.
+      - path: AgentOasis/Models/OasisStore.swift
+      - path: AgentOasis/Security/KeychainService.swift
+      - path: AgentOasis/Security/DeviceOwnerAuthenticator.swift
+      - path: AgentOasis/Services/CredentialInventoryService.swift
     settings:
       base:
         PRODUCT_NAME: AgentOasisTests
