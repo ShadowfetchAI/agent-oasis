@@ -68,6 +68,11 @@ struct PortfolioView: View {
         .onAppear {
             if selectedAppID == nil { selectedAppID = filteredApps.first?.id }
         }
+        .onChange(of: store.pendingNewItem) { _, pending in
+            guard pending, store.selection == .portfolio else { return }
+            showingAddApp = true
+            store.pendingNewItem = false
+        }
     }
 }
 

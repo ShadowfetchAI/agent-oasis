@@ -140,12 +140,18 @@ struct SettingsView: View {
                                 .font(.title2.weight(.semibold))
                             Text("Private operating intelligence for apps, APIs, people, and agents.")
                                 .font(.headline)
-                            Text("This test-drive build is a standalone native macOS application. It stores its workspace locally, authenticates through macOS, and does not require an Agent Oasis account or hosted service.")
+                            Text("A standalone native macOS application. It stores its workspace locally, authenticates through macOS, and does not require an Agent Oasis account or hosted service.")
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text("Version 0.1 (1)")
-                                .font(.caption)
+                            Text("Version \(store.appVersionString)")
+                                .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
+                            HStack(spacing: 12) {
+                                Button("What’s New") { store.showingWhatsNew = true }
+                                Button("Keyboard Shortcuts") { store.showingShortcutsSheet = true }
+                                Link("GitHub", destination: URL(string: "https://github.com/ShadowfetchAI/agent-oasis")!)
+                            }
+                            .font(.caption)
                         }
                         Spacer()
                     }

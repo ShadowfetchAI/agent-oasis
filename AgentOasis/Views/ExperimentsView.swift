@@ -55,12 +55,29 @@ struct ExperimentsView: View {
                 .environmentObject(store)
         }
         .onAppear {
+            applyFocusIfNeeded()
             if selectedID == nil { selectedID = experiments.first?.id }
         }
+        .onChange(of: store.focusedExperimentID) { _, _ in
+            applyFocusIfNeeded()
+        }
+        .onChange(of: store.pendingNewItem) { _, pending in
+            guard pending, store.selection == .experiments else { return }
+            showingAddExperiment = true
+            store.pendingNewItem = false
+        }
+    }
+
+    private func applyFocusIfNeeded() {
+        guard let id = store.focusedExperimentID,
+              store.workspace.experiments.contains(where: { $0.id == id }) else { return }
+        selectedID = id
+        store.focusedExperimentID = nil
     }
 }
 
 private struct ExperimentRow: View {
+    @EnvironmentObject private var store: OasisStore
     let experiment: Experiment
 
     private var color: Color {
@@ -90,6 +107,11 @@ private struct ExperimentRow: View {
                 .foregroundStyle(color)
         }
         .padding(.vertical, 5)
+        .contextMenu {
+            Button("Duplicate Experiment") {
+                store.duplicateExperiment(experiment)
+            }
+        }
     }
 }
 
@@ -123,6 +145,10 @@ private struct ExperimentDetailView: View {
                     }
                     .labelsHidden()
                     .frame(width: 150)
+                    Button("Duplicate") {
+                        store.duplicateExperiment(draft)
+                    }
+                    .help("Start a new planned run from this experiment’s setup.")
                     Button("Save") { store.updateExperiment(draft) }
                         .buttonStyle(.borderedProminent)
                 }

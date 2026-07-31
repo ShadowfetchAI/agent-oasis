@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RootView: View {
     @EnvironmentObject private var store: OasisStore
     @EnvironmentObject private var activityMonitor: UserActivityMonitor
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isDropTargeted = false
 
     private let lockTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
@@ -36,9 +38,29 @@ struct RootView: View {
             Text(store.errorMessage ?? store.noticeMessage ?? "")
         }
         .preferredColorScheme(.dark)
-        // README: "For UI validation without an authentication dialog, Debug builds accept
-        // the --demo-unlocked launch argument." It still required a click, which defeats
-        // automated UI capture. Debug-only and compiled out of Release, exactly as before.
+        .sheet(isPresented: $store.showingCommandPalette) {
+            CommandPaletteView()
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $store.showingShortcutsSheet) {
+            KeyboardShortcutsSheet()
+        }
+        .sheet(isPresented: $store.showingWhatsNew, onDismiss: {
+            store.markReleaseNotesSeen(store.marketingVersion)
+        }) {
+            WhatsNewSheet()
+        }
+        .sheet(isPresented: Binding(
+            get: { store.pendingImportURL != nil && store.pendingImportSummary != nil },
+            set: { visible in
+                if !visible { store.cancelImportPreview() }
+            }
+        )) {
+            if let url = store.pendingImportURL, let summary = store.pendingImportSummary {
+                ImportPreviewSheet(url: url, summary: summary)
+                    .environmentObject(store)
+            }
+        }
 #if DEBUG
         .task {
             guard ProcessInfo.processInfo.arguments.contains("--demo-unlocked"),
@@ -67,6 +89,11 @@ struct RootView: View {
         ) { _ in
             store.lock(reason: "Locked with the Mac screen")
         }
+        .onChange(of: store.lockState) { _, newValue in
+            if newValue == .unlocked, store.shouldShowWhatsNewOnUnlock() {
+                store.showingWhatsNew = true
+            }
+        }
     }
 
     private var unlockedContent: some View {
@@ -75,20 +102,43 @@ struct RootView: View {
                 .navigationSplitViewColumnWidth(min: 224, ideal: 248, max: 300)
         } detail: {
             detail
-                // A quiet backdrop so the material panels have something to sit ON. Flat
-                // opaque panels on a flat opaque window is what made this read as a form
-                // rather than an instrument; depth is what a 2026 macOS app gets for free
-                // from materials, and materials need a ground to be translucent against.
                 .background(OasisBackdrop())
+                .overlay {
+                    if isDropTargeted {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(OasisPalette.teal, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                            .padding(12)
+                            .overlay {
+                                Text("Drop CSV or TSV to preview import")
+                                    .font(.headline)
+                                    .padding(12)
+                                    .background(.ultraThinMaterial, in: Capsule())
+                            }
+                            .allowsHitTesting(false)
+                    }
+                }
+                .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+                    handleDrop(providers)
+                }
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
-                    importReport()
+                    store.showingCommandPalette = true
                 } label: {
-                    Label("Import", systemImage: "square.and.arrow.down")
+                    Label("Command Palette", systemImage: "command")
                 }
-                .help("Import a sales or ledger report")
+                .help("Open command palette (⌘K)")
+
+                Menu {
+                    Button("Import Report…") { store.requestImportPicker() }
+                    Divider()
+                    Button("Export Ledger CSV") { store.exportLedgerCSV() }
+                    Button("Export Portfolio CSV") { store.exportPortfolioCSV() }
+                    Button("Export Encrypted Backup") { store.exportBackup() }
+                } label: {
+                    Label("Import / Export", systemImage: "square.and.arrow.up.on.square")
+                }
 
                 Button {
                     store.lock(reason: "Locked by user")
@@ -177,13 +227,22 @@ struct RootView: View {
         }
     }
 
-    private func importReport() {
-        let panel = NSOpenPanel()
-        panel.title = "Import Agent Oasis Data"
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.allowedContentTypes = []
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        store.importData(from: url)
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            let url: URL?
+            if let data = item as? Data {
+                url = URL(dataRepresentation: data, relativeTo: nil)
+            } else if let value = item as? URL {
+                url = value
+            } else {
+                url = nil
+            }
+            guard let url else { return }
+            DispatchQueue.main.async {
+                store.beginImportPreview(from: url)
+            }
+        }
+        return true
     }
 }

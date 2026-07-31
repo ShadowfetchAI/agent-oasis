@@ -30,6 +30,15 @@ enum ImportExportError: LocalizedError {
 }
 
 enum ImportExportService {
+    /// Runs the importer against a copy of `state` so the UI can show counts before writing.
+    static func previewDelimitedFile(
+        at url: URL,
+        against state: WorkspaceState
+    ) throws -> ImportSummary {
+        var copy = state
+        return try importDelimitedFile(at: url, into: &copy)
+    }
+
     static func importDelimitedFile(
         at url: URL,
         into state: inout WorkspaceState

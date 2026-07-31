@@ -74,12 +74,29 @@ struct AgentsView: View {
                 .environmentObject(store)
         }
         .onAppear {
+            applyFocusIfNeeded()
             if selectedAgentID == nil { selectedAgentID = agents.first?.id }
         }
+        .onChange(of: store.focusedAgentID) { _, _ in
+            applyFocusIfNeeded()
+        }
+        .onChange(of: store.pendingNewItem) { _, pending in
+            guard pending, store.selection == .agents else { return }
+            showingAddAgent = true
+            store.pendingNewItem = false
+        }
+    }
+
+    private func applyFocusIfNeeded() {
+        guard let id = store.focusedAgentID,
+              store.workspace.agents.contains(where: { $0.id == id }) else { return }
+        selectedAgentID = id
+        store.focusedAgentID = nil
     }
 }
 
 private struct AgentRow: View {
+    @EnvironmentObject private var store: OasisStore
     let agent: AgentProfile
 
     private var economics: AgentEconomics {
@@ -111,6 +128,10 @@ private struct AgentRow: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
+            Button("Duplicate Agent") {
+                store.duplicateAgent(agent)
+            }
+            Divider()
             Button("Copy Agent ID") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(agent.id.uuidString, forType: .string)
@@ -155,6 +176,10 @@ private struct AgentDetailView: View {
                         systemImage: draft.status.systemImage,
                         color: draft.status.color
                     )
+                    Button("Duplicate") {
+                        store.duplicateAgent(draft)
+                    }
+                    .help("Clone this profile. Telemetry resets; value inputs become estimated.")
                     Button("Save Assumptions") {
                         store.updateAgent(draft)
                     }

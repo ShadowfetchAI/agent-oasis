@@ -16,25 +16,76 @@ struct AgentOasisApp: App {
         .defaultSize(width: 1_360, height: 860)
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("New…") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.requestNewItem()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(!appDelegate.store.isUnlocked)
+            }
             CommandGroup(after: .saveItem) {
+                Button("Import Report…") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.requestImportPicker()
+                }
+                .keyboardShortcut("i", modifiers: .command)
+                .disabled(!appDelegate.store.isUnlocked)
+
+                Button("Export Ledger CSV") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.exportLedgerCSV()
+                }
+                .keyboardShortcut("e", modifiers: .command)
+                .disabled(!appDelegate.store.isUnlocked)
+
+                Button("Export Encrypted Backup") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.exportBackup()
+                }
+                .disabled(!appDelegate.store.isUnlocked)
+
+                Divider()
+
                 Button("Lock Agent Oasis") {
                     appDelegate.store.lock(reason: "Locked by keyboard command")
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
                 .disabled(!appDelegate.store.isUnlocked)
-                Divider()
-                Button("Export Encrypted Backup") {
-                    appDelegate.store.exportBackup()
+            }
+            CommandGroup(after: .appInfo) {
+                Button("What’s New in Agent Oasis") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.showingWhatsNew = true
                 }
                 .disabled(!appDelegate.store.isUnlocked)
             }
             CommandMenu("Workspace") {
+                Button("Command Palette…") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.showingCommandPalette = true
+                }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(!appDelegate.store.isUnlocked)
+
+                Button("Keyboard Shortcuts") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.showingShortcutsSheet = true
+                }
+                .keyboardShortcut("/", modifiers: .command)
+                .disabled(!appDelegate.store.isUnlocked)
+
+                Divider()
+
                 ForEach(AppSection.allCases) { section in
                     Button(section.title) {
                         appDelegate.ensureMainWindow()
                         appDelegate.store.selection = section
                     }
+                    .keyboardShortcut(
+                        KeyEquivalent(Character(String(section.keyboardIndex))),
+                        modifiers: .command
+                    )
                     .disabled(!appDelegate.store.isUnlocked)
                 }
             }

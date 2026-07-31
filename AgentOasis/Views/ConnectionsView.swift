@@ -86,6 +86,18 @@ struct ConnectionsView: View {
             ConnectionEditor(connection: connection)
                 .environmentObject(store)
         }
+        .onAppear { openFocusedConnectionIfNeeded() }
+        .onChange(of: store.focusedConnectionID) { _, _ in
+            openFocusedConnectionIfNeeded()
+        }
+    }
+
+    private func openFocusedConnectionIfNeeded() {
+        guard let id = store.focusedConnectionID,
+              let connection = store.workspace.connections.first(where: { $0.id == id })
+        else { return }
+        editingConnection = connection
+        store.focusedConnectionID = nil
     }
 
     private func runPrimaryAction(_ connection: ConnectionProfile) {

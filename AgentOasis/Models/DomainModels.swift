@@ -13,6 +13,11 @@ enum AppSection: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    /// 1-based index used by ⌘1…⌘9 navigation shortcuts.
+    var keyboardIndex: Int {
+        (Self.allCases.firstIndex(of: self) ?? 0) + 1
+    }
+
     var title: String {
         switch self {
         case .commandCenter: "Command Center"
@@ -495,6 +500,11 @@ struct WorkspaceSettings: Codable, Hashable {
     /// systemd --user unit pattern for a running agent gateway.
     var hermesGatewayUnitPattern = "hermes-gw@*.service"
     var showCapacityValueInHeadline = false
+
+    /// Marketing version whose What's New sheet was last dismissed (e.g. "1.1.0").
+    ///
+    /// Optional so older workspaces decode cleanly; missing means the sheet has never been shown.
+    var lastSeenReleaseNotes: String?
 }
 
 struct WorkspaceState: Codable, Hashable {

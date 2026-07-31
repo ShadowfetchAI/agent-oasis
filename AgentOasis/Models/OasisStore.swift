@@ -20,6 +20,17 @@ final class OasisStore: ObservableObject {
     @Published private(set) var isSyncingHermes = false
     @Published private(set) var isSyncingApple = false
 
+    // Operator UI — command palette, import preview, deep links from Attention Inbox.
+    @Published var showingCommandPalette = false
+    @Published var showingShortcutsSheet = false
+    @Published var showingWhatsNew = false
+    @Published var pendingNewItem = false
+    @Published var pendingImportURL: URL?
+    @Published var pendingImportSummary: ImportSummary?
+    @Published var focusedAgentID: UUID?
+    @Published var focusedExperimentID: UUID?
+    @Published var focusedConnectionID: UUID?
+
     /// Optional because the app must not die when it cannot create its own storage.
     ///
     /// This used to be non-optional and the initialiser called `fatalError` when
@@ -383,6 +394,36 @@ final class OasisStore: ObservableObject {
         }
     }
 
+    /// Clones an agent for a new variant without inventing evidence.
+    ///
+    /// Telemetry counters reset to zero and provenance becomes all-estimated with a
+    /// "Manual duplicate" source. Copying measured Hermes figures as if they applied to a
+    /// new profile would be fabrication wearing a Duplicate button.
+    @discardableResult
+    func duplicateAgent(_ agent: AgentProfile) -> AgentProfile {
+        var copy = agent
+        copy.id = UUID()
+        copy.name = agent.name.hasSuffix(" copy") ? agent.name : "\(agent.name) copy"
+        copy.status = .idle
+        copy.sessions = 0
+        copy.messages = 0
+        copy.acceptedTasks = 0
+        copy.failedTasks = 0
+        copy.reworkedTasks = 0
+        copy.inputTokens = 0
+        copy.outputTokens = 0
+        copy.totalTokensReported = 0
+        copy.toolCalls = 0
+        copy.lastSeen = nil
+        copy.source = "Manual duplicate"
+        copy.valueBasis = .allEstimated
+        addAgent(copy)
+        focusedAgentID = copy.id
+        selection = .agents
+        noticeMessage = "Duplicated \(agent.name). Telemetry reset; value inputs marked estimated."
+        return copy
+    }
+
     func addExperiment(_ experiment: Experiment) {
         mutate(
             category: "Experiment",
@@ -404,6 +445,25 @@ final class OasisStore: ObservableObject {
             guard let index = state.experiments.firstIndex(where: { $0.id == experiment.id }) else { return }
             state.experiments[index] = experiment
         }
+    }
+
+    /// Clones an experiment as a new planned run with a fresh observation window.
+    @discardableResult
+    func duplicateExperiment(_ experiment: Experiment) -> Experiment {
+        var copy = experiment
+        copy.id = UUID()
+        copy.title = experiment.title.hasSuffix(" copy") ? experiment.title : "\(experiment.title) copy"
+        copy.status = .planned
+        copy.startedAt = Date()
+        copy.endedAt = nil
+        copy.observedProceeds = 0
+        copy.afterValue = ""
+        copy.confounders = ""
+        addExperiment(copy)
+        focusedExperimentID = copy.id
+        selection = .experiments
+        noticeMessage = "Duplicated \(experiment.title) as a new planned experiment."
+        return copy
     }
 
     func updateConnection(_ connection: ConnectionProfile) {
@@ -448,7 +508,34 @@ final class OasisStore: ObservableObject {
     }
 
     func importData(from url: URL) {
+        beginImportPreview(from: url)
+    }
+
+    /// Stages an import so the operator can confirm counts before any write.
+    func beginImportPreview(from url: URL) {
         guard isUnlocked else { return }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+        }
+        do {
+            let summary = try ImportExportService.previewDelimitedFile(at: url, against: workspace)
+            pendingImportURL = url
+            pendingImportSummary = summary
+        } catch {
+            pendingImportURL = nil
+            pendingImportSummary = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func cancelImportPreview() {
+        pendingImportURL = nil
+        pendingImportSummary = nil
+    }
+
+    func confirmImportPreview() {
+        guard isUnlocked, let url = pendingImportURL else { return }
         let accessed = url.startAccessingSecurityScopedResource()
         defer {
             if accessed { url.stopAccessingSecurityScopedResource() }
@@ -466,9 +553,100 @@ final class OasisStore: ObservableObject {
             )
             persist()
             noticeMessage = result.message
+            pendingImportURL = nil
+            pendingImportSummary = nil
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func navigate(to section: AppSection) {
+        guard isUnlocked else { return }
+        selection = section
+    }
+
+    func runCommandAction(_ name: String) {
+        guard isUnlocked else { return }
+        switch name {
+        case "new":
+            requestNewItem()
+        case "import":
+            requestImportPicker()
+        case "export-ledger":
+            exportLedgerCSV()
+        case "export-portfolio":
+            exportPortfolioCSV()
+        case "export-backup":
+            exportBackup()
+        case "lock":
+            lock(reason: "Locked by command palette")
+        case "shortcuts":
+            showingShortcutsSheet = true
+        case "whats-new":
+            showingWhatsNew = true
+        default:
+            break
+        }
+    }
+
+    /// Context-aware create: opens the add sheet for the section that can create, or Agents.
+    func requestNewItem() {
+        switch selection {
+        case .portfolio, .agents, .ledger, .experiments:
+            pendingNewItem = true
+        case .commandCenter, .connections, .vault, .audit, .settings:
+            selection = .agents
+            pendingNewItem = true
+        }
+    }
+
+    func requestImportPicker() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Agent Oasis Data"
+        panel.message = "Choose a Sales and Trends or ledger CSV/TSV. You will preview counts before anything is written."
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = []
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        beginImportPreview(from: url)
+    }
+
+    func openAttentionItem(_ item: AttentionItem) {
+        switch item.destination {
+        case .section(let section):
+            selection = section
+        case .agent(let id):
+            focusedAgentID = id
+            selection = .agents
+        case .experiment(let id):
+            focusedExperimentID = id
+            selection = .experiments
+        case .connection(let id):
+            focusedConnectionID = id
+            selection = .connections
+        }
+    }
+
+    func markReleaseNotesSeen(_ version: String) {
+        guard isUnlocked else { return }
+        var settings = workspace.settings
+        settings.lastSeenReleaseNotes = version
+        updateSettings(settings, workspaceName: workspace.name)
+    }
+
+    var appVersionString: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "1.1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(version) (\(build))"
+    }
+
+    var marketingVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.0"
+    }
+
+    func shouldShowWhatsNewOnUnlock() -> Bool {
+        workspace.settings.lastSeenReleaseNotes != marketingVersion
     }
 
     func exportBackup() {

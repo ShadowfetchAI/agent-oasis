@@ -42,6 +42,11 @@ its caveat. The raw arithmetic is still available to anyone who explicitly asks 
 
 - AES-256-GCM encrypted workspace, key held in the macOS Keychain
 - Touch ID / Mac password owner gate, auto-lock on inactivity, sleep and screen lock
+- **Attention Inbox** on Command Center — actionable gaps only (blocked agents, refused
+  attribution, stale sources, zero-evidence modelled value, missing backups)
+- **Command palette (⌘K)** plus ⌘1–⌘9 navigation, ⌘N create, ⌘I import, ⌘E export
+- Import **preview** with drag-and-drop CSV/TSV — counts before anything is written
+- Duplicate agents and experiments without inventing measured evidence
 - Read-only App Store Connect app-record sync using a vault-held `.p8` key
 - App Store Sales and Trends import for units and financial observations
 - Cash and modelled-value ledger with per-entry confidence
@@ -51,7 +56,7 @@ its caveat. The raw arithmetic is still available to anyone who explicitly asks 
 - Encrypted secret vault and a metadata-only credential inventory
 - Owner-authenticated encrypted backup, recovery key, plaintext CSV export
 - Append-only audit trail, hash-chained so removing or editing an entry is detectable, and
-  never recording secret values
+ never recording secret values
 
 ## Install
 
@@ -112,14 +117,17 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -destination 'platform=macOS' test
 ```
 
-51 tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
-the App Store Connect JWT, the delimited-text importers, and the provenance rules above —
+55+ tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
+the App Store Connect JWT, the delimited-text importers, Attention Inbox rules, import
+preview non-mutation, agent duplication provenance, and the provenance rules above —
 including that a fully-estimated agent reports zero confidence, that a workspace written
 before provenance existed decodes as estimated rather than silently claiming measurement, that
 the configurable fleet paths reject shell injection and `..` escapes, and — added after an
 audit found them — that an unreadable workspace is recoverable from a backup **while locked
 out**, that a failed restore is a no-op on your data, and that re-importing the same sales
 report does not double your revenue.
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Licence
 

@@ -98,15 +98,36 @@ struct CommandCenterView: View {
 
                     OasisPanel {
                         VStack(alignment: .leading, spacing: 14) {
-                            SectionTitle(
-                                "Priority signals",
-                                subtitle: "The items most likely to change the next decision"
-                            )
-                            ForEach(prioritySignals) { signal in
-                                SignalRow(signal: signal)
+                            HStack(alignment: .firstTextBaseline) {
+                                SectionTitle(
+                                    "Attention Inbox",
+                                    subtitle: "Actionable gaps only — empty means nothing needs you"
+                                )
+                                Spacer()
+                                if !attentionItems.isEmpty {
+                                    Text("\(attentionItems.count)")
+                                        .font(.caption.weight(.bold).monospacedDigit())
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 2)
+                                        .background(OasisPalette.coral.opacity(0.18), in: Capsule())
+                                        .foregroundStyle(OasisPalette.coral)
+                                }
                             }
-                            if prioritySignals.isEmpty {
-                                Text("No priority signals.")
+                            ForEach(attentionItems.prefix(6)) { item in
+                                AttentionRow(item: item) {
+                                    store.openAttentionItem(item)
+                                }
+                            }
+                            if attentionItems.isEmpty {
+                                Label(
+                                    "Nothing needs attention right now.",
+                                    systemImage: "checkmark.circle.fill"
+                                )
+                                .foregroundStyle(OasisPalette.green)
+                                .font(.subheadline)
+                            } else if attentionItems.count > 6 {
+                                Text("\(attentionItems.count - 6) more in Agents, Experiments, or Connections.")
+                                    .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -207,90 +228,53 @@ struct CommandCenterView: View {
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.28))
     }
 
-    private var prioritySignals: [PrioritySignal] {
-        var signals: [PrioritySignal] = []
-        let running = store.workspace.experiments.filter { $0.status == .running }
-        for experiment in running.prefix(2) {
-            let attribution = AnalyticsEngine.attribution(for: experiment)
-            let lift = attribution.lift
-            signals.append(
-                PrioritySignal(
-                    title: experiment.title,
-                    detail: lift.map {
-                        "Preliminary lift \(OasisFormat.percent($0, signed: true)); \(experiment.observationWindowDays)-day window."
-                    } ?? "Waiting for a usable baseline.",
-                    systemImage: "flask.fill",
-                    color: OasisPalette.gold
-                )
-            )
-        }
-
-        let blocked = store.workspace.agents.filter { $0.status == .blocked }
-        if !blocked.isEmpty {
-            signals.append(
-                PrioritySignal(
-                    title: "\(blocked.count) blocked agent\(blocked.count == 1 ? "" : "s")",
-                    detail: "Review assignment dependencies before adding more agent capacity.",
-                    systemImage: "exclamationmark.octagon.fill",
-                    color: OasisPalette.coral
-                )
-            )
-        }
-
-        let connections = store.workspace.connections.filter {
-            $0.status == .needsSetup || $0.status == .error || $0.status == .stale
-        }
-        if !connections.isEmpty {
-            signals.append(
-                PrioritySignal(
-                    title: "\(connections.count) data source\(connections.count == 1 ? "" : "s") need attention",
-                    detail: "Fresh source data raises the confidence of every downstream result.",
-                    systemImage: "point.3.connected.trianglepath.dotted",
-                    color: OasisPalette.teal
-                )
-            )
-        }
-
-        if store.workspace.ledger.contains(where: { $0.confidence == .inferred }) {
-            signals.append(
-                PrioritySignal(
-                    title: "Modeled values are present",
-                    detail: "Capacity and risk values remain separate from realized cash.",
-                    systemImage: "equal.circle.fill",
-                    color: OasisPalette.indigo
-                )
-            )
-        }
-        return Array(signals.prefix(4))
+    private var attentionItems: [AttentionItem] {
+        AttentionEngine.items(for: store.workspace)
     }
 }
 
-private struct PrioritySignal: Identifiable {
-    let id = UUID()
-    let title: String
-    let detail: String
-    let systemImage: String
-    let color: Color
-}
+private struct AttentionRow: View {
+    let item: AttentionItem
+    let action: () -> Void
 
-private struct SignalRow: View {
-    let signal: PrioritySignal
+    private var color: Color {
+        switch item.severity {
+        case .critical: OasisPalette.coral
+        case .warning: OasisPalette.gold
+        case .info: OasisPalette.teal
+        }
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: signal.systemImage)
-                .symbolEffect(.bounce, options: .repeating)
-                .foregroundStyle(signal.color)
-                .frame(width: 20)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(signal.title)
-                    .font(.subheadline.weight(.medium))
-                Text(signal.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: item.systemImage)
+                    .symbolEffect(
+                        .pulse,
+                        options: .repeating,
+                        isActive: item.severity == .critical
+                    )
+                    .foregroundStyle(color)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.title)
+                        .font(.subheadline.weight(.medium))
+                        .multilineTextAlignment(.leading)
+                    Text(item.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .help("Open \(item.section.title)")
     }
 }
 
@@ -320,20 +304,45 @@ struct GettingStartedPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 step("1", "square.and.arrow.down",
                      "Import a Sales and Trends report",
-                     "Toolbar → Import. Adds real units and proceeds. Re-importing the same "
-                         + "file will not double-count it.")
+                     "⌘I or drop a CSV/TSV here. You will preview counts before anything is "
+                         + "written. Re-importing the same file will not double-count it.")
                 step("2", "key.horizontal",
                      "Connect App Store Connect (optional)",
                      "Vault → add your .p8 key, then Connections. Read-only; it syncs app "
                          + "records, never money.")
                 step("3", "person.2",
                      "Add the agents you actually run",
-                     "Agents → add. Mark each value input as measured or estimated - the app "
-                         + "keeps cash and modelled value apart and will not blend them.")
+                     "⌘3 then ⌘N, or Agents → add. Mark each value input as measured or "
+                         + "estimated — cash and modelled value stay apart.")
                 step("4", "arrow.down.doc",
                      "Export a backup and keep the recovery key",
-                     "Vault → Export encrypted backup. Without it, losing this Mac loses the "
-                         + "workspace.")
+                     "Settings → Export encrypted backup. Without it, losing this Mac loses "
+                         + "the workspace.")
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    store.requestImportPicker()
+                } label: {
+                    Label("Import report…", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    store.selection = .agents
+                    store.pendingNewItem = true
+                } label: {
+                    Label("Add first agent", systemImage: "plus")
+                }
+
+                Button {
+                    store.showingCommandPalette = true
+                } label: {
+                    Label("Command palette", systemImage: "command")
+                }
+                .help("⌘K")
+
+                Spacer(minLength: 0)
             }
         }
         .padding(OasisMetrics.panelPadding)

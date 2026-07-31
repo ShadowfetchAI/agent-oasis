@@ -120,6 +120,11 @@ struct LedgerView: View {
             AddLedgerEntrySheet()
                 .environmentObject(store)
         }
+        .onChange(of: store.pendingNewItem) { _, pending in
+            guard pending, store.selection == .ledger else { return }
+            showingAddEntry = true
+            store.pendingNewItem = false
+        }
     }
 }
 
