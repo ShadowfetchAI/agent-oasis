@@ -89,6 +89,7 @@ private struct AgentRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: agent.status.systemImage)
+                .symbolEffect(.pulse, options: .repeating, isActive: agent.status == .active)
                 .foregroundStyle(agent.status.color)
                 .frame(width: 25)
             VStack(alignment: .leading, spacing: 3) {
@@ -109,6 +110,16 @@ private struct AgentRow: View {
             }
         }
         .padding(.vertical, 4)
+        .contextMenu {
+            Button("Copy Agent ID") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(agent.id.uuidString, forType: .string)
+            }
+            Button("Copy Cash Value") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(OasisFormat.currency(economics.cashNetValue), forType: .string)
+            }
+        }
     }
 }
 

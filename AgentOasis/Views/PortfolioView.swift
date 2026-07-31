@@ -98,6 +98,16 @@ private struct PortfolioRow: View {
                 .font(.caption.weight(.medium))
         }
         .padding(.vertical, 4)
+        .contextMenu {
+            Button("Copy Bundle ID") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(app.bundleID, forType: .string)
+            }
+            Button("Copy SKU") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(app.sku, forType: .string)
+            }
+        }
     }
 }
 

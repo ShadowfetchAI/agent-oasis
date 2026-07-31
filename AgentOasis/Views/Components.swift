@@ -53,20 +53,20 @@ extension View {
         corner: CGFloat = OasisMetrics.corner,
         elevated: Bool = true
     ) -> some View {
-        background(.regularMaterial, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
+        background(.thickMaterial, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
-                    .strokeBorder(.separator.opacity(0.35), lineWidth: 0.5)
+                    .strokeBorder(.separator.opacity(0.40), lineWidth: 0.5)
             )
             .shadow(
-                color: .black.opacity(elevated ? 0.16 : 0),
-                radius: elevated ? 14 : 0,
+                color: .black.opacity(elevated ? 0.20 : 0),
+                radius: elevated ? 16 : 0,
                 x: 0,
-                y: elevated ? 6 : 0
+                y: elevated ? 8 : 0
             )
     }
 }
@@ -284,12 +284,18 @@ struct StatusIndicator: View {
     let text: String
     let systemImage: String
     let color: Color
+    var pulse: Bool = false
 
     var body: some View {
-        Label(text, systemImage: systemImage)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(color)
-            .lineLimit(1)
+        Label {
+            Text(text)
+        } icon: {
+            Image(systemName: systemImage)
+                .symbolEffect(.pulse, options: .repeating, isActive: pulse)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(color)
+        .lineLimit(1)
     }
 }
 

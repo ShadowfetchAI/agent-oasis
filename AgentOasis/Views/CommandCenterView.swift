@@ -279,6 +279,7 @@ private struct SignalRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: signal.systemImage)
+                .symbolEffect(.bounce, options: .repeating)
                 .foregroundStyle(signal.color)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 3) {
