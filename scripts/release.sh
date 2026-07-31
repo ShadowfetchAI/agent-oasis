@@ -76,11 +76,20 @@ case "$BUILD_DIR" in
   *) fail "BUILD_DIR must stay below build/ so release cleanup cannot touch source files." ;;
 esac
 
+# Desktop / iCloud Drive / File Provider folders stamp com.apple.FinderInfo on the .app and
+# make codesign fail with "resource fork, Finder information, or similar detritus". Run this
+# script from a local path (for example rsync the tree to /tmp) when the checkout lives on Desktop.
+
 # ---- build -------------------------------------------------------------------------------
 step "Generating project and building universal Release"
 xcodegen generate
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
+
+# Finder / external-volume copies leave resource forks and quarantine xattrs on assets.
+# codesign refuses them with "resource fork, Finder information, or similar detritus".
+step "Clearing extended attributes from source assets"
+xattr -cr AgentOasis "Brand Assets" "Sample Imports" 2>/dev/null || true
 
 xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
   -configuration Release -destination 'generic/platform=macOS' \
