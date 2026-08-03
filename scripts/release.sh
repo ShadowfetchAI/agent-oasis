@@ -49,7 +49,10 @@ EXPECTED_APP_ID="$AGENT_OASIS_DEVELOPMENT_TEAM.$AGENT_OASIS_BUNDLE_PREFIX.AgentO
 
 PROFILE_INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 mkdir -p "$PROFILE_INSTALL_DIR"
-cp "$PROFILE_PATH" "$PROFILE_INSTALL_DIR/$PROFILE_UUID.provisionprofile"
+PROFILE_TARGET="$PROFILE_INSTALL_DIR/$PROFILE_UUID.provisionprofile"
+if [ "$PROFILE_PATH" != "$PROFILE_TARGET" ]; then
+  cp "$PROFILE_PATH" "$PROFILE_TARGET"
+fi
 echo "  profile: $PROFILE_NAME ($PROFILE_UUID)"
 
 # Developer ID Application is the ONLY identity Gatekeeper accepts for direct distribution.
