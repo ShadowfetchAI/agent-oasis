@@ -56,21 +56,30 @@ struct LedgerView: View {
                 ) {
                     MetricTile(
                         title: "Recorded revenue",
-                        value: OasisFormat.currency(summary.cashRevenue),
-                        detail: "Actual and imported proceeds",
+                        value: OasisFormat.currency(
+                            summary.cashRevenue,
+                            code: store.workspace.settings.baseCurrency
+                        ),
+                        detail: "Actual and imported proceeds in the base currency",
                         systemImage: "arrow.down.left.circle",
                         color: OasisPalette.green
                     )
                     MetricTile(
                         title: "Recorded expenses",
-                        value: OasisFormat.currency(summary.cashExpenses),
+                        value: OasisFormat.currency(
+                            summary.cashExpenses,
+                            code: store.workspace.settings.baseCurrency
+                        ),
                         detail: "Cash outflows only",
                         systemImage: "arrow.up.right.circle",
                         color: OasisPalette.coral
                     )
                     MetricTile(
                         title: "Net cash",
-                        value: OasisFormat.currency(summary.netCash),
+                        value: OasisFormat.currency(
+                            summary.netCash,
+                            code: store.workspace.settings.baseCurrency
+                        ),
                         detail: "Excludes modeled capacity value",
                         systemImage: "equal.circle",
                         color: OasisPalette.teal

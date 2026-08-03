@@ -115,6 +115,11 @@ struct SettingsView: View {
                             } label: {
                                 Label("Export Portfolio CSV", systemImage: "square.grid.2x2")
                             }
+                            Button {
+                                store.exportExecutiveBrief()
+                            } label: {
+                                Label("Export Executive Brief", systemImage: "doc.richtext")
+                            }
                             Spacer()
                         }
                         Label(
@@ -138,7 +143,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Agent Oasis")
                                 .font(.title2.weight(.semibold))
-                            Text("Private operating intelligence for apps, APIs, people, and agents.")
+                            Text("Private decision intelligence for apps, APIs, people, and agents.")
                                 .font(.headline)
                             Text("A standalone native macOS application. It stores its workspace locally, authenticates through macOS, and does not require an Agent Oasis account or hosted service.")
                                 .foregroundStyle(.secondary)

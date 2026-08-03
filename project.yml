@@ -10,8 +10,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "5"
     # Empty by default so a clone builds for anyone. Set AGENT_OASIS_DEVELOPMENT_TEAM in
     # your environment (or pass DEVELOPMENT_TEAM=... to xcodebuild) to sign with your own
     # Apple team. Hardcoding one person's team ID is what makes an open source Xcode project
@@ -71,6 +71,8 @@ targets:
       - path: AgentOasis/Security/EncryptedWorkspaceRepository.swift
       - path: AgentOasis/Services/AnalyticsEngine.swift
       - path: AgentOasis/Services/AttentionEngine.swift
+      - path: AgentOasis/Services/DecisionEngine.swift
+      - path: AgentOasis/Services/ExecutiveBriefingService.swift
       - path: AgentOasis/Services/DelimitedTextParser.swift
       - path: AgentOasis/Services/ImportExportService.swift
       - path: AgentOasis/Services/HermesConnector.swift

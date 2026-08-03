@@ -62,6 +62,9 @@ struct WorkspaceSummary {
     let staleConnections: Int
     /// Share of agent value inputs that are measured, across the fleet. 0 when nothing is.
     let fleetEvidenceRatio: Double
+    /// Cash rows preserved in another currency and therefore excluded from workspace totals.
+    let excludedCurrencyEntryCount: Int
+    let excludedCurrencies: [String]
 }
 
 struct MonthlyPoint: Identifiable {
@@ -197,15 +200,26 @@ enum AnalyticsEngine {
     }
 
     static func summary(for state: WorkspaceState) -> WorkspaceSummary {
-        let revenue = state.ledger
+        let baseCurrency = state.settings.baseCurrency.uppercased()
+        let baseCurrencyLedger = state.ledger.filter {
+            $0.currency.uppercased() == baseCurrency
+        }
+        let revenue = baseCurrencyLedger
             .filter { $0.type == .revenue }
             .reduce(Decimal.zero) { $0 + $1.amount }
-        let expenses = state.ledger
+        let expenses = baseCurrencyLedger
             .filter { $0.type == .expense }
             .reduce(Decimal.zero) { $0 + $1.amount }
-        let cashSavings = state.ledger
+        let cashSavings = baseCurrencyLedger
             .filter { $0.type == .cashSavings }
             .reduce(Decimal.zero) { $0 + $1.amount }
+        let excludedCashEntries = state.ledger.filter {
+            $0.currency.uppercased() != baseCurrency
+                && ($0.type == .revenue || $0.type == .expense || $0.type == .cashSavings)
+        }
+        let excludedCurrencies = Array(Set(excludedCashEntries.map {
+            $0.currency.uppercased()
+        })).sorted()
 
         let economics = state.agents.map(agentEconomics)
         let capacity = economics.reduce(Decimal.zero) { $0 + $1.modeledCapacityValue }
@@ -234,17 +248,21 @@ enum AnalyticsEngine {
             activeExperiments: state.experiments.filter { $0.status == .running }.count,
             averageAppHealth: averageHealth,
             staleConnections: stale,
-            fleetEvidenceRatio: ratio
+            fleetEvidenceRatio: ratio,
+            excludedCurrencyEntryCount: excludedCashEntries.count,
+            excludedCurrencies: excludedCurrencies
         )
     }
 
     static func monthlyCashFlow(for state: WorkspaceState, months: Int = 6) -> [MonthlyPoint] {
         let calendar = Calendar(identifier: .gregorian)
         let now = Date()
+        let baseCurrency = state.settings.baseCurrency.uppercased()
         return (0..<months).reversed().map { offset in
             let date = calendar.date(byAdding: .month, value: -offset, to: now) ?? now
             let matching = state.ledger.filter {
                 calendar.isDate($0.date, equalTo: date, toGranularity: .month)
+                    && $0.currency.uppercased() == baseCurrency
             }
             let revenue = matching.filter { $0.type == .revenue }
                 .reduce(Decimal.zero) { $0 + $1.amount }

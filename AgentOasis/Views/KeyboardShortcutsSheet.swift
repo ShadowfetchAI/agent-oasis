@@ -6,14 +6,14 @@ struct KeyboardShortcutsSheet: View {
     private let groups: [(String, [(String, String)])] = [
         ("Navigation", [
             ("⌘1", "Command Center"),
-            ("⌘2", "Portfolio"),
-            ("⌘3", "Agents"),
-            ("⌘4", "Ledger"),
-            ("⌘5", "Experiments"),
-            ("⌘6", "Connections"),
-            ("⌘7", "Vault"),
-            ("⌘8", "Audit"),
-            ("⌘9", "Settings")
+            ("⌘2", "Decision Lab"),
+            ("⌘3", "Portfolio"),
+            ("⌘4", "Agents"),
+            ("⌘5", "Ledger"),
+            ("⌘6", "Experiments"),
+            ("⌘7", "Connections"),
+            ("⌘8", "Vault"),
+            ("⌘9", "Audit")
         ]),
         ("Actions", [
             ("⌘K", "Command palette"),
@@ -26,7 +26,8 @@ struct KeyboardShortcutsSheet: View {
         ("Tips", [
             ("Drop CSV/TSV", "Onto Command Center or Ledger to preview import"),
             ("Right-click", "Agents and experiments for Duplicate"),
-            ("Attention Inbox", "Command Center lists only actionable gaps")
+            ("Attention Inbox", "Command Center lists only actionable gaps"),
+            ("Decision Lab", "Rank evidence, model assumptions, and capture checkpoints")
         ])
     ]
 

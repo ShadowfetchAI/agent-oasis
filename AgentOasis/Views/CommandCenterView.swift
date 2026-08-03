@@ -45,8 +45,11 @@ struct CommandCenterView: View {
                 ) {
                     MetricTile(
                         title: "Net cash",
-                        value: OasisFormat.currency(summary.netCash),
-                        detail: "Revenue minus recorded cash expenses",
+                        value: OasisFormat.currency(
+                            summary.netCash,
+                            code: store.workspace.settings.baseCurrency
+                        ),
+                        detail: "Revenue minus cash expenses in the workspace base currency",
                         systemImage: "banknote",
                         color: summary.netCash >= 0 ? OasisPalette.green : OasisPalette.coral
                     )
@@ -71,6 +74,22 @@ struct CommandCenterView: View {
                         systemImage: "flask",
                         color: OasisPalette.gold
                     )
+                }
+
+                if summary.excludedCurrencyEntryCount > 0 {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "coloncurrencysign.circle")
+                            .foregroundStyle(OasisPalette.gold)
+                        Text(
+                            "\(summary.excludedCurrencyEntryCount) cash entries in "
+                                + "\(summary.excludedCurrencies.joined(separator: ", ")) are preserved "
+                                + "but excluded from \(store.workspace.settings.baseCurrency) totals. "
+                                + "Agent Oasis never assumes an exchange rate."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 2)
                 }
 
                 HStack(alignment: .top, spacing: 14) {

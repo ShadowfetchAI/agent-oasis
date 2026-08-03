@@ -78,6 +78,33 @@ final class AppStoreConnectConnectorTests: XCTestCase {
         )
     }
 
+    func testSalesReportURLUsesDocumentedReadOnlyFilters() throws {
+        let url = try AppStoreConnectConnector.salesReportURL(vendorNumber: "94178184")
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let values = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map {
+            ($0.name, $0.value ?? "")
+        })
+
+        XCTAssertEqual(url.host, "api.appstoreconnect.apple.com")
+        XCTAssertEqual(url.path, "/v1/salesReports")
+        XCTAssertEqual(values["filter[frequency]"], "DAILY")
+        XCTAssertEqual(values["filter[reportType]"], "SALES")
+        XCTAssertEqual(values["filter[reportSubType]"], "SUMMARY")
+        XCTAssertEqual(values["filter[vendorNumber]"], "94178184")
+        XCTAssertEqual(values["filter[version]"], "1_0")
+    }
+
+    func testSalesReportDecoderHandlesAppleGzipAndStableSourceDate() throws {
+        let base64 = "H4sIAETab2oAA0XN0QrCIBiG4eN/V+EN1HRBdbqyIOpAmF5A6LcQhoq6we6+ddTpywOvynHxDpmGpyHt6wRSObrZVqbXBPZwCNWPfhMm+FpIYsEUEzLbnAVcoeucM4JdWRz/8YKPD0y+K5peqdftN9gJ0iiV9SmRuNOB+P7EyQyS+Lnlou14d2y+/YK7o5IAAAA="
+        let data = try XCTUnwrap(Data(base64Encoded: base64))
+
+        let report = try AppStoreConnectConnector.decodeSalesReport(data)
+
+        XCTAssertTrue(report.text.contains("Test App"))
+        XCTAssertEqual(report.sourceName, "AppStoreConnect-Daily-2026-08-01.tsv")
+        XCTAssertNotNil(report.reportDate)
+    }
+
     private func decodeJSONSegment(_ value: String) throws -> [String: Any] {
         let data = try XCTUnwrap(base64URLData(value))
         return try XCTUnwrap(

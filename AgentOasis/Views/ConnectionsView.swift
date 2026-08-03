@@ -107,7 +107,16 @@ struct ConnectionsView: View {
         case .appStoreConnect:
             let keyID = connection.configuration["keyID", default: ""]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if connection.secretItemID != nil, !keyID.isEmpty {
+            let salesKeyID = connection.configuration["salesKeyID", default: ""]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let vendor = connection.configuration["vendorNumber", default: ""]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasAppSync = connection.secretItemID != nil && !keyID.isEmpty
+            let hasSeparateSalesKey = UUID(
+                uuidString: connection.configuration["salesSecretItemID", default: ""]
+            ) != nil && !salesKeyID.isEmpty
+            let hasSalesSync = !vendor.isEmpty && (hasSeparateSalesKey || hasAppSync)
+            if hasAppSync || hasSalesSync {
                 Task { await store.syncAppStoreConnect() }
             } else {
                 editingConnection = connection
@@ -157,18 +166,35 @@ private struct ConnectionRow: View {
 
     private var actionTitle: String {
         switch connection.kind {
-        case .hermesFleet: isSyncingHermes ? "Syncing..." : "Sync Now"
+        case .hermesFleet:
+            return isSyncingHermes ? "Syncing..." : "Sync Now"
         case .appStoreConnect:
-            if connection.secretItemID == nil
-                || connection.configuration["keyID", default: ""].isEmpty {
-                "Set Up"
+            let appReady = connection.secretItemID != nil
+                && !connection.configuration["keyID", default: ""].isEmpty
+            let vendorReady = !connection.configuration["vendorNumber", default: ""].isEmpty
+            let salesSecretReady = UUID(
+                uuidString: connection.configuration["salesSecretItemID", default: ""]
+            ) != nil
+            let salesKeyReady = !connection.configuration["salesKeyID", default: ""].isEmpty
+            let salesReady = vendorReady && (appReady || (salesSecretReady && salesKeyReady))
+            if !appReady && !salesReady {
+                return "Set Up"
             } else {
-                isSyncingApple ? "Syncing..." : "Sync Apps"
+                if isSyncingApple { return "Syncing..." }
+                else if !connection.configuration["vendorNumber", default: ""].isEmpty {
+                    return "Sync Apps & Sales"
+                } else {
+                    return "Sync Apps"
+                }
             }
-        case .delimitedFiles: "Import Report"
-        case .credentialIndex: "Index Folder"
-        case .manual: "Open Ledger"
-        case .website, .linux: "Configure"
+        case .delimitedFiles:
+            return "Import Report"
+        case .credentialIndex:
+            return "Index Folder"
+        case .manual:
+            return "Open Ledger"
+        case .website, .linux:
+            return "Configure"
         }
     }
 
@@ -269,25 +295,50 @@ private struct ConnectionEditor: View {
                         Text(mode.title).tag(mode)
                     }
                 }
-                Picker("Secret", selection: $draft.secretItemID) {
-                    Text("No secret selected").tag(UUID?.none)
-                    ForEach(store.workspace.vaultItems) { item in
-                        Text("\(item.service) - \(item.label)").tag(Optional(item.id))
-                    }
-                }
                 if draft.kind == .appStoreConnect {
+                    Picker("App records key", selection: $draft.secretItemID) {
+                        Text("No app-record key").tag(UUID?.none)
+                        ForEach(store.workspace.vaultItems) { item in
+                            Text("\(item.service) - \(item.label)").tag(Optional(item.id))
+                        }
+                    }
                     TextField(
-                        "Issuer ID (blank for an individual key)",
+                        "App records Issuer ID (blank for an individual key)",
                         text: configurationBinding("issuerID")
                     )
                     TextField(
-                        "Key ID",
+                        "App records Key ID",
                         text: configurationBinding("keyID")
                     )
+                    Divider()
                     TextField(
                         "Vendor number",
                         text: configurationBinding("vendorNumber")
                     )
+                    Picker(
+                        "Sales reports key",
+                        selection: configurationBinding("salesSecretItemID")
+                    ) {
+                        Text("Use app records key").tag("")
+                        ForEach(store.workspace.vaultItems) { item in
+                            Text("\(item.service) - \(item.label)").tag(item.id.uuidString)
+                        }
+                    }
+                    TextField(
+                        "Sales Issuer ID (blank for an individual key)",
+                        text: configurationBinding("salesIssuerID")
+                    )
+                    TextField(
+                        "Sales Key ID (blank when reusing app key)",
+                        text: configurationBinding("salesKeyID")
+                    )
+                } else {
+                    Picker("Secret", selection: $draft.secretItemID) {
+                        Text("No secret selected").tag(UUID?.none)
+                        ForEach(store.workspace.vaultItems) { item in
+                            Text("\(item.service) - \(item.label)").tag(Optional(item.id))
+                        }
+                    }
                 }
                 TextField("Notes", text: $draft.notes, axis: .vertical)
             }
@@ -316,7 +367,19 @@ private struct ConnectionEditor: View {
                         let hasKeyID = !draft.configuration["keyID", default: ""]
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                             .isEmpty
-                        draft.status = draft.secretItemID != nil && hasKeyID
+                        let vendor = !draft.configuration["vendorNumber", default: ""]
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                            .isEmpty
+                        let salesKey = !draft.configuration["salesKeyID", default: ""]
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                            .isEmpty
+                        let separateSalesSecret = UUID(
+                            uuidString: draft.configuration["salesSecretItemID", default: ""]
+                        ) != nil
+                        let canSyncApps = draft.secretItemID != nil && hasKeyID
+                        let canSyncSales = vendor
+                            && (canSyncApps || (separateSalesSecret && salesKey))
+                        draft.status = canSyncApps || canSyncSales
                             ? .stale
                             : .needsSetup
                     } else if draft.kind == .hermesFleet {
@@ -329,7 +392,7 @@ private struct ConnectionEditor: View {
             }
         }
         .padding(24)
-        .frame(width: 560, height: draft.kind == .appStoreConnect ? 600 : 480)
+        .frame(width: 620, height: draft.kind == .appStoreConnect ? 760 : 480)
     }
 
     private func configurationBinding(_ key: String) -> Binding<String> {

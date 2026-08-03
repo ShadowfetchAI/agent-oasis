@@ -39,6 +39,15 @@ enum ImportExportService {
         return try importDelimitedFile(at: url, into: &copy)
     }
 
+    static func previewDelimitedText(
+        _ text: String,
+        sourceName: String,
+        against state: WorkspaceState
+    ) throws -> ImportSummary {
+        var copy = state
+        return try importDelimitedText(text, sourceName: sourceName, into: &copy)
+    }
+
     static func importDelimitedFile(
         at url: URL,
         into state: inout WorkspaceState
@@ -46,15 +55,23 @@ enum ImportExportService {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
             throw ImportExportError.unreadableFile
         }
+        return try importDelimitedText(text, sourceName: url.lastPathComponent, into: &state)
+    }
+
+    static func importDelimitedText(
+        _ text: String,
+        sourceName: String,
+        into state: inout WorkspaceState
+    ) throws -> ImportSummary {
         let rows = DelimitedTextParser.parse(text)
         guard !rows.isEmpty else { throw ImportExportError.noRecognizedRows }
 
         let headerKeys = Set(rows[0].keys.map(normalizedKey))
         if headerKeys.contains("developerproceeds") || headerKeys.contains("units") && headerKeys.contains("title") {
-            return importAppStoreRows(rows, sourceName: url.lastPathComponent, into: &state)
+            return importAppStoreRows(rows, sourceName: sourceName, into: &state)
         }
         if headerKeys.contains("amount") && headerKeys.contains("type") {
-            return importLedgerRows(rows, sourceName: url.lastPathComponent, into: &state)
+            return importLedgerRows(rows, sourceName: sourceName, into: &state)
         }
         throw ImportExportError.noRecognizedRows
     }
@@ -107,6 +124,13 @@ enum ImportExportService {
         var observationsAdded = 0
         var ledgerAdded = 0
         let calendar = Calendar(identifier: .gregorian)
+        let keys = Set(rows.first?.keys.map(normalizedKey) ?? [])
+        // In Apple's real Summary Sales report, Developer Proceeds is PER UNIT. Earlier
+        // Agent Oasis example files used the same heading for a pre-calculated row total.
+        // The official report can be identified by its Provider and Product Type fields, so
+        // both formats remain compatible without silently multiplying legacy imports.
+        let isOfficialAppleSummary = keys.contains("provider")
+            && keys.contains("producttypeidentifier")
         let grouped = Dictionary(grouping: rows) { row in
             value(in: row, keys: ["SKU", "Title", "App Name", "Apple Identifier"]) ?? "Imported App"
         }
@@ -144,17 +168,30 @@ enum ImportExportService {
                 appsCreated += 1
             }
 
-            let byDate = Dictionary(grouping: appRows) { row in
-                parseDate(value(in: row, keys: ["Begin Date", "End Date", "Date"])) ?? Date()
+            let byDateAndCurrency = Dictionary(grouping: appRows) { row in
+                AppStoreObservationGroup(
+                    date: parseDate(value(in: row, keys: ["Begin Date", "End Date", "Date"]))
+                        ?? Date(),
+                    currency: value(
+                        in: row,
+                        keys: ["Currency of Proceeds", "Customer Currency"]
+                    ) ?? "USD"
+                )
             }
-            for (date, dateRows) in byDate {
+            for (group, dateRows) in byDateAndCurrency {
+                let date = group.date
                 let units = dateRows.reduce(0) {
-                    $0 + (Int((value(in: $1, keys: ["Units"]) ?? "0").replacingOccurrences(of: ",", with: "")) ?? 0)
+                    $0 + decimalUnits(value(in: $1, keys: ["Units"]))
                 }
                 let proceeds = dateRows.reduce(Decimal.zero) {
-                    $0 + (decimal(value(in: $1, keys: ["Developer Proceeds", "Proceeds"])) ?? 0)
+                    let amount = decimal(value(in: $1, keys: ["Developer Proceeds", "Proceeds"])) ?? 0
+                    if isOfficialAppleSummary,
+                       value(in: $1, keys: ["Developer Proceeds"]) != nil {
+                        return $0 + amount * Decimal(decimalUnits(value(in: $1, keys: ["Units"])))
+                    }
+                    return $0 + amount
                 }
-                let currency = value(in: dateRows[0], keys: ["Currency of Proceeds", "Customer Currency"]) ?? "USD"
+                let currency = group.currency
                 // IDEMPOTENT BY (app, day, source). The previous version appended
                 // unconditionally, so importing the same monthly Sales and Trends file twice -
                 // a re-download, a retry after a mis-click, the same file kept in two folders -
@@ -169,7 +206,9 @@ enum ImportExportService {
                     confidence: .confirmed
                 )
                 if let existing = state.apps[appIndex].observations.firstIndex(where: {
-                    $0.source == sourceName && calendar.isDate($0.date, inSameDayAs: date)
+                    $0.source == sourceName
+                        && $0.currency.caseInsensitiveCompare(currency) == .orderedSame
+                        && calendar.isDate($0.date, inSameDayAs: date)
                 }) {
                     // A corrected re-export of the same day should REPLACE, not accumulate.
                     state.apps[appIndex].observations[existing] = observation
@@ -196,6 +235,7 @@ enum ImportExportService {
                 if let existing = state.ledger.firstIndex(where: {
                     $0.entityID == appID && $0.source == sourceName
                         && $0.category == "App sales"
+                        && $0.currency.caseInsensitiveCompare(currency) == .orderedSame
                         && calendar.isDate($0.date, inSameDayAs: date)
                 }) {
                     state.ledger[existing] = entry
@@ -281,6 +321,11 @@ enum ImportExportService {
         return Decimal(string: sanitized, locale: Locale(identifier: "en_US_POSIX"))
     }
 
+    private static func decimalUnits(_ value: String?) -> Int {
+        guard let decimalValue = decimal(value) else { return 0 }
+        return NSDecimalNumber(decimal: decimalValue).intValue
+    }
+
     private static func parseDate(_ value: String?) -> Date? {
         guard let value else { return nil }
         let iso = ISO8601DateFormatter()
@@ -308,4 +353,9 @@ enum ImportExportService {
         }
         return value
     }
+}
+
+private struct AppStoreObservationGroup: Hashable {
+    let date: Date
+    let currency: String
 }

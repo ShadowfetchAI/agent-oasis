@@ -82,6 +82,15 @@ enum OasisCommandCatalog {
                 kind: .action("export-backup")
             ),
             OasisCommand(
+                id: "export-brief",
+                title: "Export executive brief",
+                subtitle: "Self-contained HTML decision report with no vault contents",
+                systemImage: "doc.richtext",
+                shortcut: nil,
+                keywords: ["export", "brief", "report", "executive", "decision"],
+                kind: .action("export-brief")
+            ),
+            OasisCommand(
                 id: "lock",
                 title: "Lock Agent Oasis",
                 subtitle: "Require Touch ID or Mac password to reopen",
