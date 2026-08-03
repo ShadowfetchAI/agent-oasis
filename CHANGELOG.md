@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.1 - Kanban persistence fix (2026-08-02)
+
+`HermesKanbanCard` had a custom `Decodable` initializer expecting `created_at` as a raw
+epoch number, but no matching `Encodable` implementation - the synthesized encoder wrote it
+as an ISO 8601 string instead, which the decoder then rejected. Any workspace with a blocked
+kanban card would fail to reopen on the next launch. Added `HermesKanbanCard.encode(to:)` so
+the persisted format matches what the decoder reads, plus a regression test
+(`testKanbanCardRoundTripsCreatedAtThroughPersistence`) that encodes and decodes a card the
+way the encrypted workspace does. 80 tests (was 79).
+
 ## 3.0.0 - Hermes Fleet (2026-08-02)
 
 Agentic operations becomes a first-class part of the workspace, not a sync button buried in

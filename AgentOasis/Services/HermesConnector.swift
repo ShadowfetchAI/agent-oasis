@@ -44,6 +44,19 @@ struct HermesKanbanCard: Codable, Hashable, Identifiable {
         }
     }
 
+    // Mirrors init(from:): createdAt as a raw epoch Double, not the decoder's date
+    // strategy (.iso8601 for the persisted workspace). Without this, the synthesized
+    // Encodable would write an ISO8601 string that init(from:) then fails to read back.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(assignee, forKey: .assignee)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(priority, forKey: .priority)
+        try container.encodeIfPresent(createdAt?.timeIntervalSince1970, forKey: .createdAt)
+    }
+
     // Memberwise, for tests and fixture construction.
     init(id: String, title: String, assignee: String?, status: String, priority: Int?, createdAt: Date?) {
         self.id = id

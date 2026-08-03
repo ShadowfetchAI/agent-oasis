@@ -13,7 +13,7 @@ struct MakePreviewWorkspace {
         let now = Date()
         var workspace = DemoWorkspace.make(now: now)
         workspace.name = "Shadowfetch Studio"
-        workspace.settings.lastSeenReleaseNotes = "3.0.0"
+        workspace.settings.lastSeenReleaseNotes = "3.0.1"
         for appIndex in workspace.apps.indices {
             for observationIndex in workspace.apps[appIndex].observations.indices {
                 workspace.apps[appIndex].observations[observationIndex].confidence = .confirmed

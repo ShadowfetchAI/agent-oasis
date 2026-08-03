@@ -78,6 +78,26 @@ final class HermesFleetServiceTests: XCTestCase {
         XCTAssertFalse(reencodedString.contains("named-executive"))
     }
 
+    func testKanbanCardRoundTripsCreatedAtThroughPersistence() throws {
+        let blockedJSON = """
+        [{"id": "t_x", "title": "Title", "assignee": "a", "status": "blocked", "priority": 1, "created_at": 1700000000}]
+        """
+        let output = combinedOutput(kanbanStats: "{\"by_status\": {\"blocked\": 1}}", kanbanBlocked: blockedJSON)
+        let result = try HermesFleetService.parse(output)
+        let card = try XCTUnwrap(result.kanbanHealth?.oldestBlocked.first)
+        XCTAssertEqual(card.createdAt?.timeIntervalSince1970, 1700000000)
+
+        // Persist and reload, as the encrypted workspace does. A synthesized Encodable would
+        // write createdAt under the app's own date strategy instead of the epoch Double that
+        // init(from:) expects, corrupting every workspace with a blocked card on next launch.
+        let persisted = try JSONEncoder().encode(card)
+        let reloaded = try JSONDecoder().decode(HermesKanbanCard.self, from: persisted)
+        XCTAssertEqual(
+            reloaded.createdAt?.timeIntervalSince1970, 1700000000,
+            "createdAt must survive an app-internal encode/decode round trip"
+        )
+    }
+
     // MARK: - Decision queue
 
     func testDecisionQueueParsesShapeOnly() throws {

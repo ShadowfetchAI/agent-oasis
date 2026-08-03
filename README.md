@@ -134,7 +134,7 @@ you want to sign a personal build; see [SETUP.md](SETUP.md).
 
 ## Verification
 
-The 3.0 test suite contains 79 tests covering:
+The 3.0 test suite contains 80 tests covering:
 
 - encryption, wrong-key rejection, authenticated tamper detection, and owner-only files
 - recovery while locked out, failed-restore atomicity, and pre-destructive snapshots
