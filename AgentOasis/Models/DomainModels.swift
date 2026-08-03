@@ -2,6 +2,7 @@ import Foundation
 
 enum AppSection: String, CaseIterable, Identifiable, Codable {
     case commandCenter
+    case decisionLab
     case portfolio
     case agents
     case ledger
@@ -14,13 +15,15 @@ enum AppSection: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
 
     /// 1-based index used by ⌘1…⌘9 navigation shortcuts.
-    var keyboardIndex: Int {
-        (Self.allCases.firstIndex(of: self) ?? 0) + 1
+    var keyboardIndex: Int? {
+        let index = (Self.allCases.firstIndex(of: self) ?? 0) + 1
+        return index <= 9 ? index : nil
     }
 
     var title: String {
         switch self {
         case .commandCenter: "Command Center"
+        case .decisionLab: "Decision Lab"
         case .portfolio: "Portfolio"
         case .agents: "Agents"
         case .ledger: "Ledger"
@@ -35,6 +38,7 @@ enum AppSection: String, CaseIterable, Identifiable, Codable {
     var systemImage: String {
         switch self {
         case .commandCenter: "gauge.with.dots.needle.67percent"
+        case .decisionLab: "scope"
         case .portfolio: "square.grid.2x2"
         case .agents: "cpu"
         case .ledger: "list.bullet.rectangle"
@@ -484,6 +488,25 @@ struct AuditEvent: Identifiable, Codable, Hashable {
     var evidenceHash: String
 }
 
+/// A point-in-time business record used to compare decisions over months instead of relying
+/// on whichever numbers happen to be visible today. These are summaries, not replacements
+/// for the underlying ledger and observations, and measured and modelled value stay separate.
+struct BusinessSnapshot: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var capturedAt: Date
+    var label: String
+    var currency: String
+    var cashRevenue: Decimal
+    var cashExpenses: Decimal
+    var netCash: Decimal
+    var recentPortfolioProceeds: Decimal
+    var agentCashNetValue: Decimal
+    var agentModeledNetValue: Decimal
+    var trackedApps: Int
+    var activeAgents: Int
+    var fleetEvidenceRatio: Double
+}
+
 struct WorkspaceSettings: Codable, Hashable {
     var baseCurrency = "USD"
     var autoLockMinutes = 15
@@ -501,14 +524,14 @@ struct WorkspaceSettings: Codable, Hashable {
     var hermesGatewayUnitPattern = "hermes-gw@*.service"
     var showCapacityValueInHeadline = false
 
-    /// Marketing version whose What's New sheet was last dismissed (e.g. "1.1.0").
+    /// Marketing version whose What's New sheet was last dismissed (e.g. "2.0.0").
     ///
     /// Optional so older workspaces decode cleanly; missing means the sheet has never been shown.
     var lastSeenReleaseNotes: String?
 }
 
 struct WorkspaceState: Codable, Hashable {
-    var schemaVersion = 1
+    var schemaVersion = 2
     var workspaceID = UUID()
     var name = "Agent Oasis"
     var createdAt = Date()
@@ -521,7 +544,11 @@ struct WorkspaceState: Codable, Hashable {
     var vaultItems: [VaultItem] = []
     var credentialInventory: [CredentialInventoryItem] = []
     var audit: [AuditEvent] = []
+    /// Optional so encrypted workspaces written by 1.x decode without a migration cliff.
+    var businessSnapshots: [BusinessSnapshot]?
     var settings = WorkspaceSettings()
+
+    var snapshots: [BusinessSnapshot] { businessSnapshots ?? [] }
 
     static var empty: WorkspaceState {
         WorkspaceState(name: "Locked Workspace")

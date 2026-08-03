@@ -504,6 +504,11 @@ final class OasisStore: ObservableObject {
                 $0.connections[index].secretItemID = nil
                 $0.connections[index].status = .needsSetup
             }
+            for index in $0.connections.indices
+            where $0.connections[index].configuration["salesSecretItemID"] == id.uuidString {
+                $0.connections[index].configuration["salesSecretItemID"] = nil
+                $0.connections[index].status = .needsSetup
+            }
         }
     }
 
@@ -578,6 +583,8 @@ final class OasisStore: ObservableObject {
             exportPortfolioCSV()
         case "export-backup":
             exportBackup()
+        case "export-brief":
+            exportExecutiveBrief()
         case "lock":
             lock(reason: "Locked by command palette")
         case "shortcuts":
@@ -594,7 +601,7 @@ final class OasisStore: ObservableObject {
         switch selection {
         case .portfolio, .agents, .ledger, .experiments:
             pendingNewItem = true
-        case .commandCenter, .connections, .vault, .audit, .settings:
+        case .commandCenter, .decisionLab, .connections, .vault, .audit, .settings:
             selection = .agents
             pendingNewItem = true
         }
@@ -636,13 +643,13 @@ final class OasisStore: ObservableObject {
 
     var appVersionString: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "1.1.0"
+            ?? "2.0.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         return "\(version) (\(build))"
     }
 
     var marketingVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0.0"
     }
 
     func shouldShowWhatsNewOnUnlock() -> Bool {
@@ -772,6 +779,48 @@ final class OasisStore: ObservableObject {
             suggestedName: "Agent-Oasis-Portfolio-\(Self.fileDateFormatter.string(from: Date())).csv",
             data: ImportExportService.portfolioCSV(from: workspace),
             entityName: "Portfolio"
+        )
+    }
+
+    func captureBusinessSnapshot(label: String? = nil) {
+        let name = label?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = "Checkpoint \(Date().formatted(date: .abbreviated, time: .shortened))"
+        let snapshot = DecisionEngine.makeSnapshot(
+            label: name?.isEmpty == false ? name! : fallback,
+            state: workspace
+        )
+        mutate(
+            category: "Decision",
+            action: "Business checkpoint captured",
+            entityName: snapshot.label,
+            summary: "Captured cash, portfolio, agent, and evidence measures without vault contents."
+        ) { state in
+            var snapshots = state.businessSnapshots ?? []
+            snapshots.append(snapshot)
+            state.businessSnapshots = snapshots
+        }
+        noticeMessage = "Business checkpoint captured."
+    }
+
+    func deleteBusinessSnapshot(id: UUID) {
+        guard let snapshot = workspace.snapshots.first(where: { $0.id == id }) else { return }
+        mutate(
+            category: "Decision",
+            action: "Business checkpoint removed",
+            entityName: snapshot.label,
+            summary: "Removed a point-in-time summary; source ledger and observations were unchanged."
+        ) { state in
+            state.businessSnapshots?.removeAll { $0.id == id }
+        }
+    }
+
+    func exportExecutiveBrief() {
+        let html = ExecutiveBriefingService.html(for: workspace)
+        exportPlaintextDocument(
+            suggestedName: "Agent-Oasis-Brief-\(Self.fileDateFormatter.string(from: Date())).html",
+            data: Data(html.utf8),
+            title: "Executive Brief",
+            format: "self-contained HTML"
         )
     }
 
@@ -906,27 +955,94 @@ final class OasisStore: ObservableObject {
             errorMessage = "No App Store Connect connection is configured."
             return
         }
-        guard let secretID = connection.secretItemID,
-              let secret = workspace.vaultItems.first(where: { $0.id == secretID }) else {
-            errorMessage = "Select an App Store Connect .p8 key from the encrypted vault."
+        let appKeyID = connection.configuration["keyID", default: ""]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let appSecret = connection.secretItemID.flatMap { secretID in
+            workspace.vaultItems.first(where: { $0.id == secretID })
+        }
+        let salesSecretID = connection.configuration["salesSecretItemID"]
+            .flatMap(UUID.init(uuidString:))
+        let salesSecret = salesSecretID.flatMap { secretID in
+            workspace.vaultItems.first(where: { $0.id == secretID })
+        } ?? appSecret
+        let salesKeyID = connection.configuration["salesKeyID", default: ""]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveSalesKeyID = salesSecretID == nil && salesKeyID.isEmpty
+            ? appKeyID
+            : salesKeyID
+        let vendorNumber = connection.configuration["vendorNumber", default: ""]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let canSyncApps = appSecret != nil && !appKeyID.isEmpty
+        let canSyncSales = salesSecret != nil
+            && !effectiveSalesKeyID.isEmpty
+            && !vendorNumber.isEmpty
+        guard canSyncApps || canSyncSales else {
+            errorMessage = "Configure an app-record key or a Sales and Reports key with a Vendor Number."
             return
         }
 
         isSyncingApple = true
         defer { isSyncingApple = false }
-        do {
-            let records = try await AppStoreConnectConnector.fetchApps(
-                issuerID: connection.configuration["issuerID", default: ""],
-                keyID: connection.configuration["keyID", default: ""],
-                privateKeyPEM: secret.secret
-            )
-            let syncedAt = Date()
-            mutate(
-                category: "Connection",
-                action: "App Store Connect synchronized",
-                entityName: connection.name,
-                summary: "Read and reconciled \(records.count) App Store app records."
-            ) { state in
+        var records: [AppStoreAppRecord]?
+        var salesReport: AppStoreSalesReport?
+        var failures: [String] = []
+
+        if canSyncApps, let appSecret {
+            do {
+                records = try await AppStoreConnectConnector.fetchApps(
+                    issuerID: connection.configuration["issuerID", default: ""],
+                    keyID: appKeyID,
+                    privateKeyPEM: appSecret.secret
+                )
+            } catch {
+                failures.append("App records: \(error.localizedDescription)")
+            }
+        }
+
+        if canSyncSales, let salesSecret {
+            do {
+                let explicitIssuer = connection.configuration["salesIssuerID", default: ""]
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                salesReport = try await AppStoreConnectConnector.fetchLatestDailySalesReport(
+                    issuerID: salesSecretID == nil && explicitIssuer.isEmpty
+                        ? connection.configuration["issuerID", default: ""]
+                        : explicitIssuer,
+                    keyID: effectiveSalesKeyID,
+                    privateKeyPEM: salesSecret.secret,
+                    vendorNumber: vendorNumber
+                )
+            } catch {
+                failures.append("Sales report: \(error.localizedDescription)")
+            }
+        }
+
+        guard records != nil || salesReport != nil else {
+            if let index = workspace.connections.firstIndex(where: { $0.id == connection.id }) {
+                workspace.connections[index].status = .error
+                workspace.connections[index].lastSync = Date()
+                workspace.connections[index].notes = failures.joined(separator: " ")
+                appendAudit(
+                    category: "Connection",
+                    action: "App Store Connect sync failed",
+                    entityName: connection.name,
+                    summary: "Read-only app and sales requests failed. No secret value was logged."
+                )
+                persist()
+            }
+            errorMessage = failures.joined(separator: "\n")
+            return
+        }
+
+        let syncedAt = Date()
+        var importedSales: ImportSummary?
+        var importFailure: String?
+        mutate(
+            category: "Connection",
+            action: "App Store Connect synchronized",
+            entityName: connection.name,
+            summary: "Synchronized app records and available daily sales evidence."
+        ) { state in
+            if let records {
                 for record in records {
                     if let index = state.apps.firstIndex(where: {
                         // Both arms must require a non-empty identifier. The sku arm already
@@ -943,10 +1059,6 @@ final class OasisStore: ObservableObject {
                         state.apps[index].name = record.name
                         state.apps[index].bundleID = record.bundleID
                         state.apps[index].sku = record.sku
-                        if state.apps[index].notes.contains("Sample portfolio record") {
-                            state.apps[index].notes =
-                                "Live App Store Connect record. Import Sales and Trends data to add financial observations."
-                        }
                     } else {
                         state.apps.append(
                             PortfolioApp(
@@ -960,40 +1072,49 @@ final class OasisStore: ObservableObject {
                                 currency: state.settings.baseCurrency,
                                 healthScore: 0.5,
                                 launchedAt: nil,
-                                notes: "Live App Store Connect record. Confirm platform and import Sales and Trends data for financial observations.",
+                                notes: "Live App Store Connect record. Confirm platform and category.",
                                 observations: []
                             )
                         )
                     }
                 }
+            }
 
-                if let index = state.connections.firstIndex(where: {
-                    $0.id == connection.id
-                }) {
-                    state.connections[index].status = .connected
-                    state.connections[index].lastSync = syncedAt
-                    state.connections[index].recordsImported = records.count
-                    state.connections[index].notes =
-                        "Live read-only app-record sync. Financial data remains report-imported."
+            if let salesReport {
+                do {
+                    importedSales = try ImportExportService.importDelimitedText(
+                        salesReport.text,
+                        sourceName: salesReport.sourceName,
+                        into: &state
+                    )
+                } catch {
+                    importFailure = error.localizedDescription
                 }
             }
-            noticeMessage = "\(records.count) App Store app records synchronized."
-        } catch {
-            if let index = workspace.connections.firstIndex(where: {
-                $0.id == connection.id
-            }) {
-                workspace.connections[index].status = .error
-                workspace.connections[index].lastSync = Date()
-                workspace.connections[index].notes = error.localizedDescription
-                appendAudit(
-                    category: "Connection",
-                    action: "App Store Connect sync failed",
-                    entityName: connection.name,
-                    summary: "The read-only request failed. No secret value was logged."
-                )
-                persist()
+
+            if let index = state.connections.firstIndex(where: { $0.id == connection.id }) {
+                let recordCount = records?.count ?? 0
+                let salesCount = importedSales?.totalRecords ?? 0
+                let allFailures = failures + [importFailure].compactMap { $0 }
+                state.connections[index].status = allFailures.isEmpty ? .connected : .stale
+                state.connections[index].lastSync = syncedAt
+                state.connections[index].recordsImported = recordCount + salesCount
+                var notes: [String] = []
+                if records != nil { notes.append("\(recordCount) app records reconciled.") }
+                if let importedSales {
+                    notes.append("Latest daily sales: \(importedSales.observationsAdded) observations, \(importedSales.ledgerEntriesAdded) cash entries.")
+                }
+                notes.append(contentsOf: allFailures)
+                state.connections[index].notes = notes.joined(separator: " ")
             }
-            errorMessage = error.localizedDescription
+        }
+
+        let appCount = records?.count ?? 0
+        let salesCount = importedSales?.observationsAdded ?? 0
+        noticeMessage = "App Store Connect synced \(appCount) apps and \(salesCount) daily sales observations."
+        let allFailures = failures + [importFailure].compactMap { $0 }
+        if !allFailures.isEmpty {
+            errorMessage = "Partial sync completed.\n" + allFailures.joined(separator: "\n")
         }
     }
 
@@ -1073,6 +1194,37 @@ final class OasisStore: ObservableObject {
             )
             persist()
             noticeMessage = "\(entityName) CSV saved."
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func exportPlaintextDocument(
+        suggestedName: String,
+        data: Data,
+        title: String,
+        format: String
+    ) {
+        guard isUnlocked else { return }
+        let panel = NSSavePanel()
+        panel.title = "Export \(title)"
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard isUnlocked, key != nil else {
+            errorMessage = WorkspaceSecurityError.workspaceLocked.localizedDescription
+            return
+        }
+        do {
+            try data.write(to: url, options: .atomic)
+            appendAudit(
+                category: "Export",
+                action: "Executive brief exported",
+                entityName: title,
+                summary: "Exported user-requested \(format) without vault items or secret values."
+            )
+            persist()
+            noticeMessage = "\(title) saved."
         } catch {
             errorMessage = error.localizedDescription
         }

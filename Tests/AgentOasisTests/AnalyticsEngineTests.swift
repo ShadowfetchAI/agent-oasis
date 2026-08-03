@@ -96,6 +96,29 @@ final class AnalyticsEngineTests: XCTestCase {
         XCTAssertEqual(summary.netCash, 380)
     }
 
+    func testWorkspaceCashDoesNotMixCurrenciesWithoutAnExchangeRate() {
+        var state = WorkspaceState()
+        state.settings.baseCurrency = "USD"
+        state.ledger = [
+            LedgerEntry(
+                date: Date(), type: .revenue, category: "Sales",
+                entityKind: .business, entityName: "Business", description: "USD sale",
+                amount: 100, currency: "USD", source: "Test", confidence: .confirmed, notes: ""
+            ),
+            LedgerEntry(
+                date: Date(), type: .revenue, category: "Sales",
+                entityKind: .business, entityName: "Business", description: "EUR sale",
+                amount: 500, currency: "EUR", source: "Test", confidence: .confirmed, notes: ""
+            )
+        ]
+
+        let summary = AnalyticsEngine.summary(for: state)
+
+        XCTAssertEqual(summary.cashRevenue, 100)
+        XCTAssertEqual(summary.excludedCurrencyEntryCount, 1)
+        XCTAssertEqual(summary.excludedCurrencies, ["EUR"])
+    }
+
     func testExperimentLift() {
         let experiment = Experiment(
             appName: "App",

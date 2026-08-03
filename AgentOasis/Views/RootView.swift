@@ -135,6 +135,7 @@ struct RootView: View {
                     Divider()
                     Button("Export Ledger CSV") { store.exportLedgerCSV() }
                     Button("Export Portfolio CSV") { store.exportPortfolioCSV() }
+                    Button("Export Executive Brief") { store.exportExecutiveBrief() }
                     Button("Export Encrypted Backup") { store.exportBackup() }
                 } label: {
                     Label("Import / Export", systemImage: "square.and.arrow.up.on.square")
@@ -161,6 +162,7 @@ struct RootView: View {
                 sidebarItem(.commandCenter)
             }
             Section("Intelligence") {
+                sidebarItem(.decisionLab)
                 sidebarItem(.portfolio)
                 sidebarItem(.agents)
                 sidebarItem(.ledger)
@@ -208,6 +210,8 @@ struct RootView: View {
         switch store.selection {
         case .commandCenter:
             CommandCenterView()
+        case .decisionLab:
+            DecisionLabView()
         case .portfolio:
             PortfolioView()
         case .agents:

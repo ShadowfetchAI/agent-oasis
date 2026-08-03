@@ -1,6 +1,51 @@
 # Changelog
 
-## 1.1.0 — Operator Workspace (2026-07-30)
+## 2.0.0 - Decision Intelligence (2026-08-02)
+
+Agent Oasis grows from an encrypted operating ledger into a private decision workspace.
+
+### Decision Lab
+- Added an evidence-ranked portfolio queue with Scale, Hold and measure, Investigate,
+  Refresh data, and Add evidence postures.
+- Added an agent frontier that keeps measured cash value and modelled capacity value apart.
+- Added Scenario Studio with price, unit, refund, proceeds-rate, variable-cost,
+  operating-cost, and labor-capacity assumptions.
+- Added downside-to-upside volume sensitivity and whole-unit break-even calculation.
+- Added business checkpoints and baseline deltas for price, release, cost, and workflow
+  decisions.
+- Added secret-free Markdown and self-contained HTML executive briefs.
+
+### Direct Apple sales evidence
+- Added read-only download of Apple's latest available daily Summary Sales report through
+  the documented App Store Connect API.
+- Added separate app-record and Sales and Reports vault credentials for least-privilege
+  setups, with optional key reuse.
+- Added team-key and individual-key JWT handling with 15-minute ES256 tokens.
+- Added secure gzip extraction in an owner-only temporary directory with guaranteed cleanup.
+- Added partial-sync behavior so successful app metadata or sales evidence is retained when
+  the other request fails.
+
+### Accounting integrity
+- Official Apple Developer Proceeds is treated as per-unit and multiplied by signed Units
+  exactly once.
+- Imports are idempotent and corrected re-exports replace matching evidence.
+- Apple rows are preserved by source date and proceeds currency.
+- Workspace cash totals and monthly cash flow include only the configured base currency.
+- Foreign-currency entries remain stored and are disclosed as excluded instead of being
+  silently summed or converted.
+- Portfolio decision windows use each product's own configured currency.
+
+### Product and quality
+- Added Decision Lab navigation, menu commands, Command Palette action, and keyboard shortcut.
+- Updated the Connections editor for live sales configuration and clearer read-only status.
+- Updated Command Center, Ledger, imports, Settings, and What's New for the 2.0 contract.
+- Added a Debug-only external preview harness for repeatable visual QA; no fixture data is
+  compiled into Release.
+- Expanded the suite to 70 tests, including decision rules, scenarios, checkpoints,
+  executive-brief secret exclusion, gzip sales decoding, currencies, and official-report
+  arithmetic.
+
+## 1.1.0 - Operator Workspace (2026-07-30)
 
 Flagship upgrade focused on daily operator speed and honest attention.
 
@@ -31,6 +76,6 @@ Flagship upgrade focused on daily operator speed and honest attention.
 ### Tests
 - Coverage for Attention Inbox rules, import preview non-mutation, and agent duplicate provenance.
 
-## 1.0.0 — Flagship polish
+## 1.0.0 - Flagship polish
 
 - Refined materials UI, searchable Agents/Portfolio, context-menu copy actions.

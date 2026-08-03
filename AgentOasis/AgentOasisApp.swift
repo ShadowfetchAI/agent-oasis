@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import SwiftUI
 
 @main
@@ -45,6 +46,12 @@ struct AgentOasisApp: App {
                 }
                 .disabled(!appDelegate.store.isUnlocked)
 
+                Button("Export Executive Brief") {
+                    appDelegate.ensureMainWindow()
+                    appDelegate.store.exportExecutiveBrief()
+                }
+                .disabled(!appDelegate.store.isUnlocked)
+
                 Divider()
 
                 Button("Lock Agent Oasis") {
@@ -78,15 +85,23 @@ struct AgentOasisApp: App {
                 Divider()
 
                 ForEach(AppSection.allCases) { section in
-                    Button(section.title) {
-                        appDelegate.ensureMainWindow()
-                        appDelegate.store.selection = section
+                    if let index = section.keyboardIndex {
+                        Button(section.title) {
+                            appDelegate.ensureMainWindow()
+                            appDelegate.store.selection = section
+                        }
+                        .keyboardShortcut(
+                            KeyEquivalent(Character(String(index))),
+                            modifiers: .command
+                        )
+                        .disabled(!appDelegate.store.isUnlocked)
+                    } else {
+                        Button(section.title) {
+                            appDelegate.ensureMainWindow()
+                            appDelegate.store.selection = section
+                        }
+                        .disabled(!appDelegate.store.isUnlocked)
                     }
-                    .keyboardShortcut(
-                        KeyEquivalent(Character(String(section.keyboardIndex))),
-                        modifiers: .command
-                    )
-                    .disabled(!appDelegate.store.isUnlocked)
                 }
             }
         }
@@ -95,9 +110,20 @@ struct AgentOasisApp: App {
 
 @MainActor
 final class AgentOasisAppDelegate: NSObject, NSApplicationDelegate {
-    let store = OasisStore()
+    let store: OasisStore
     let activityMonitor = UserActivityMonitor()
     private var fallbackWindow: NSWindow?
+
+    override init() {
+#if DEBUG
+        store = PreviewWorkspaceBootstrap.makeIfRequested(
+            arguments: ProcessInfo.processInfo.arguments
+        ) ?? OasisStore()
+#else
+        store = OasisStore()
+#endif
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -172,6 +198,60 @@ final class AgentOasisAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 }
+
+#if DEBUG
+/// Loads an external JSON fixture into an isolated encrypted workspace for visual QA.
+/// No fixture records or bypass path are compiled into Release builds.
+@MainActor
+private enum PreviewWorkspaceBootstrap {
+    static func makeIfRequested(arguments: [String]) -> OasisStore? {
+        guard let fixtureIndex = arguments.firstIndex(of: "--preview-workspace-json") else {
+            return nil
+        }
+        guard arguments.indices.contains(fixtureIndex + 1) else {
+            preconditionFailure("--preview-workspace-json requires a file path")
+        }
+
+        do {
+            let fixtureURL = URL(fileURLWithPath: arguments[fixtureIndex + 1])
+            let storageURL: URL
+            if let storageIndex = arguments.firstIndex(of: "--preview-storage"),
+               arguments.indices.contains(storageIndex + 1) {
+                storageURL = URL(fileURLWithPath: arguments[storageIndex + 1])
+            } else {
+                storageURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("AgentOasisPreview-\(UUID().uuidString)", isDirectory: true)
+            }
+
+            let data = try Data(contentsOf: fixtureURL)
+            let decoder = JSONDecoder()
+            var workspace = try decoder.decode(WorkspaceState.self, from: data)
+            workspace.settings.lastSeenReleaseNotes = "2.0.0"
+
+            let keyMaterial = Data(SHA256.hash(
+                data: Data("agent-oasis-isolated-preview-v1".utf8)
+            ))
+            let key = SymmetricKey(data: keyMaterial)
+            let repository = try EncryptedWorkspaceRepository(baseDirectory: storageURL)
+            try repository.save(workspace, using: key)
+
+            let store = OasisStore(
+                repository: repository,
+                keyProvider: { _ in key },
+                ownerAuthenticator: { _ in nil }
+            )
+            if let sectionIndex = arguments.firstIndex(of: "--preview-section"),
+               arguments.indices.contains(sectionIndex + 1),
+               let section = AppSection(rawValue: arguments[sectionIndex + 1]) {
+                store.selection = section
+            }
+            return store
+        } catch {
+            preconditionFailure("Could not create isolated preview workspace: \(error)")
+        }
+    }
+}
+#endif
 
 @MainActor
 final class UserActivityMonitor: ObservableObject {

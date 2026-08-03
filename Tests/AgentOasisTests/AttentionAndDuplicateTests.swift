@@ -86,7 +86,7 @@ final class AttentionAndDuplicateTests: XCTestCase {
     }
 
     func testPreviewImportDoesNotMutateWorkspace() throws {
-        var state = WorkspaceState()
+        let state = WorkspaceState()
         let beforeCount = state.ledger.count
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ledger-preview-\(UUID().uuidString).csv")

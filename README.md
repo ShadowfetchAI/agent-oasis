@@ -1,134 +1,161 @@
 # Agent Oasis
 
-A native macOS operating ledger for products, agents, APIs, experiments, costs, and
-business value. Local-first, encrypted on disk, no server and no account.
+**Private decision intelligence for products, agents, costs, and experiments.**
 
-macOS 14+ · SwiftUI + Charts · MIT licensed
+Agent Oasis is a native macOS workspace for operators who need to understand what is
+working, what is costing money, and what deserves the next decision. It keeps the source
+data, assumptions, checkpoints, and conclusions together in one encrypted local file.
 
-[Product page](https://www.shadowfetch.com/agent-oasis) ·
-[Latest signed release](https://github.com/ShadowfetchAI/agent-oasis/releases/latest)
+No Agent Oasis account. No Shadowfetch server. No telemetry. No subscription.
 
----
+macOS 14+ | Apple silicon and Intel | SwiftUI + Charts | MIT licensed
 
-## The idea it is built around
+[Download the latest signed release](https://github.com/ShadowfetchAI/agent-oasis/releases/latest) |
+[Product page](https://www.shadowfetch.com/agent-oasis) |
+[Setup](SETUP.md) |
+[Security model](docs/SECURITY.md)
 
-Most tools that claim to measure what AI agents are "worth" quietly add three estimates to
-one invoice and print an ROI. Agent Oasis refuses to do that.
+![Agent Oasis 2.0 Decision Lab](docs/assets/decision-lab-2.png)
 
-Every value input carries its **provenance** — `measured` (imported or observed, and
-re-derivable from a source) or `estimated` (a person typed it). Cash and modelled value are
-computed separately, displayed separately, and **never summed anywhere in the app**:
+## Agent Oasis 2.0
 
-| | what it is |
+Version 2.0 turns the original encrypted operating ledger into a decision workspace.
+
+### Decision Lab
+
+- **Portfolio queue** ranks products from current evidence and names the next posture:
+  scale, hold and measure, investigate, refresh evidence, or establish a baseline.
+- **Agent frontier** compares measured operating cost, supervision, capacity value, and
+  evidence quality without pretending modelled labor is cash.
+- **Scenario Studio** tests price, volume, cost, and agent-capacity assumptions with
+  downside, plan, and upside cases plus break-even units.
+- **Checkpoints** preserve the workspace state behind a decision so later results can be
+  compared with what was known at the time.
+- **Executive briefs** export a self-contained HTML or Markdown report while excluding
+  vault values and API secrets.
+
+### Live read-only sales evidence
+
+Agent Oasis can now download Apple's latest available daily Summary Sales report directly
+from the documented App Store Connect API. The response is decoded locally, imported
+idempotently, and linked to the matching product as confirmed evidence.
+
+App-record access and Sales and Reports access can use separate API keys. This lets an
+operator grant only the privileges needed for each job. Manual CSV/TSV import remains
+available and uses the same preview and duplicate-protection pipeline.
+
+See [App Store Connect setup](docs/APP-STORE-CONNECT.md).
+
+## A strict accounting boundary
+
+Agent Oasis does not manufacture a persuasive number by adding unlike things together.
+
+| Class | Meaning |
 |---|---|
-| **Cash** | money that actually moved: real costs, and revenue someone measured |
-| **Modelled** | capacity value, avoided spend, asserted revenue — judgements, useful for planning |
+| **Cash** | Money that actually moved: imported proceeds and recorded expenses |
+| **Modelled value** | Capacity, avoided spend, or revenue influence used for planning |
+| **Measured evidence** | Imported or observed data that can be traced to a source |
+| **Estimated evidence** | A human-entered assumption that remains visibly labelled |
 
-**Nothing is ever fabricated.** A new workspace is empty. The app ships with no sample data
-at all — not as a default, not behind a setting. `DemoWorkspace` lives in the test target, so
-the shipped binary is structurally incapable of inventing a record, and a test walks the app
-sources and fails if that machinery returns. Every figure you see is one you put there.
+Cash and modelled value are displayed separately and never combined into a single ROI.
+Experiment attribution is refused when a recorded confounder makes the lift ambiguous.
+Confidence measures evidence quality and freshness, not activity volume.
 
-**Confidence measures evidence, not activity.** An agent with four hand-entered value inputs
-scores **zero confidence** no matter how many tasks it completed today. Staleness can lower
-that score; nothing can inflate it. If the number has no evidence behind it, the app says so
-rather than dressing a guess in a percentage.
+Currency is also a hard boundary. Workspace cash totals include only the selected base
+currency. Foreign-currency entries remain intact and are disclosed as excluded until the
+operator converts them outside Agent Oasis and imports the result. The app never applies a
+hidden exchange rate.
 
-**Experiments refuse attribution when a confounder is recorded.** A lift figure a reader
-cannot distinguish from seasonality is worse than no figure, because it gets repeated without
-its caveat. The raw arithmetic is still available to anyone who explicitly asks for it.
+## Core workspace
 
-## Features
+- **Command Center** - honest cash, modelled value, coverage, trends, and an actionable
+  Attention Inbox
+- **Portfolio** - products, price history, observations, costs, proceeds, and source notes
+- **Agents** - local and Hermes-agent costs, supervision, outcomes, and evidence provenance
+- **Ledger** - income and expenses with currency, source, confidence, and audit history
+- **Experiments** - baselines, variants, confounders, outcomes, and attribution status
+- **Connections** - read-only App Store Connect and read-only SSH fleet telemetry
+- **Vault** - encrypted API keys and local secret references
+- **Audit** - append-only, hash-chained event history with tamper detection
 
-- AES-256-GCM encrypted workspace, key held in the macOS Keychain
-- Touch ID / Mac password owner gate, auto-lock on inactivity, sleep and screen lock
-- **Attention Inbox** on Command Center — actionable gaps only (blocked agents, refused
-  attribution, stale sources, zero-evidence modelled value, missing backups)
-- **Command palette (⌘K)** plus ⌘1–⌘9 navigation, ⌘N create, ⌘I import, ⌘E export
-- Import **preview** with drag-and-drop CSV/TSV — counts before anything is written
-- Duplicate agents and experiments without inventing measured evidence
-- Read-only App Store Connect app-record sync using a vault-held `.p8` key
-- App Store Sales and Trends import for units and financial observations
-- Cash and modelled-value ledger with per-entry confidence
-- Experiment timeline with baselines, confounders and honest attribution
-- Per-agent cost, supervision, capacity, revenue influence and ROI — split by provenance
-- Read-only fleet telemetry over an SSH alias, with a configurable profiles path
-- Encrypted secret vault and a metadata-only credential inventory
-- Owner-authenticated encrypted backup, recovery key, plaintext CSV export
-- Append-only audit trail, hash-chained so removing or editing an entry is detectable, and
- never recording secret values
+Fast operation is built in: Command Palette with `Command-K`, section navigation with
+`Command-1` through `Command-0`, contextual create, previewed imports, exports, and immediate
+lock.
+
+## Privacy and security
+
+- AES-256-GCM workspace encryption before data reaches disk
+- Owner-only `0600` workspace and backup files
+- Encryption key stored in the macOS Keychain
+- Touch ID or Mac password owner gate
+- Auto-lock on inactivity, sleep, and screen lock
+- Short-lived ES256 App Store Connect tokens generated in process
+- API secrets excluded from audit summaries and exported executive briefs
+- Credential inventory reads metadata only, never credential contents
+- Hardened Runtime and Developer ID signing in official releases
+
+The app is directly distributed and intentionally not sandboxed because optional Hermes
+fleet telemetry invokes `/usr/bin/ssh`. The complete threat model and limitations are in
+[docs/SECURITY.md](docs/SECURITY.md).
 
 ## Install
 
 Download the signed and notarized DMG from
-[Releases](https://github.com/ShadowfetchAI/agent-oasis/releases/latest), open it, and drag
-Agent Oasis to Applications. The release is universal for Apple Silicon and Intel Macs.
+[GitHub Releases](https://github.com/ShadowfetchAI/agent-oasis/releases/latest), open it,
+and drag Agent Oasis to Applications. Gatekeeper verification is part of the release
+pipeline. The app is universal for Apple silicon and Intel Macs.
 
-See [SETUP.md](SETUP.md) for App Store Connect, fleet telemetry and backups.
+Agent Oasis opens to an empty workspace. It never ships sample company, revenue, or agent
+records in the product binary.
 
-## Build
+## Build from source
 
-Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
-(`brew install xcodegen`). `project.yml` is the source of truth; the `.xcodeproj` is
-generated and not committed.
+Requires Xcode 16+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+`project.yml` is the source of truth; the generated Xcode project is not committed.
+
+```sh
+brew install xcodegen
+git clone https://github.com/ShadowfetchAI/agent-oasis.git
+cd agent-oasis
+xcodegen generate
+xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
+  -destination 'platform=macOS' -derivedDataPath DerivedData \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+The repository does not pin a developer team. Set your own bundle prefix and team only when
+you want to sign a personal build; see [SETUP.md](SETUP.md).
+
+## Verification
+
+The 2.0 test suite contains 70 tests covering:
+
+- encryption, wrong-key rejection, authenticated tamper detection, and owner-only files
+- recovery while locked out, failed-restore atomicity, and pre-destructive snapshots
+- App Store Connect JWTs, pagination, Apple gzip reports, and documented query filters
+- per-unit proceeds arithmetic, currency separation, and import idempotency
+- decision ranking, stale evidence, scenario break-even, and checkpoint deltas
+- cash/modelled-value separation and foreign-currency exclusion
+- audit-chain rewriting/removal detection and secret-free executive briefs
+- delimited-text edge cases, fleet path injection rejection, and no sample generator in the
+  application target
 
 ```sh
 xcodegen generate
 xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
-  -destination 'platform=macOS' -derivedDataPath DerivedData test
+  -destination 'platform=macOS' -derivedDataPath DerivedData \
+  CODE_SIGNING_ALLOWED=NO test
 ```
 
-`project.yml` does not pin a developer account. To build without an Apple Developer account,
-pass `CODE_SIGNING_ALLOWED=NO` (this is what CI does), or set your own team ID and bundle
-prefix as described in [SETUP.md](SETUP.md).
+## Documentation
 
-Debug builds accept `--demo-unlocked`, which skips the authentication dialog for UI work and
-automated capture. It is compiled out of Release builds.
+- [Setup and first run](SETUP.md)
+- [Decision Lab](docs/DECISION-LAB.md)
+- [App Store Connect integration](docs/APP-STORE-CONNECT.md)
+- [Security model](docs/SECURITY.md)
+- [Data and accounting contract](docs/DATA-CONTRACT.md)
+- [Release history](CHANGELOG.md)
 
-## Security boundaries
-
-There is no server. The workspace is encrypted before it touches Application Support, written
-`0600` by creation rather than chmod-after-write, and connectors receive narrowly scoped
-credentials inside the app process. Agent prompts and audit summaries never receive raw
-secret values.
-
-The credential inventory reads filenames, sizes, modification dates and POSIX permissions
-only. It never opens a candidate file.
-
-An exported CSV is intentionally plaintext. Encrypted `.oasisbackup` files require the
-separately stored recovery key.
-
-### Known limitations
-
-Stated plainly, because a security section that only lists strengths is marketing.
-
-- **The app is not sandboxed.** It spawns `/usr/bin/ssh` for fleet telemetry, which the
-  sandbox forbids. This is a deliberate trade for a directly-distributed tool and it is why
-  Agent Oasis is not a Mac App Store app.
-- **Unsigned source builds use a compatibility fallback.** The official Developer ID release
-  includes the provisioning profile and keychain entitlement needed for the data protection
-  keychain. An unsigned local build cannot claim that entitlement, so it falls back to the
-  legacy keychain rather than locking the owner out of an existing workspace.
-
-## Tests
-
-```sh
-xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
-  -destination 'platform=macOS' test
-```
-
-55+ tests cover the cipher (round trip, tamper detection, wrong-key rejection, file mode),
-the App Store Connect JWT, the delimited-text importers, Attention Inbox rules, import
-preview non-mutation, agent duplication provenance, and the provenance rules above —
-including that a fully-estimated agent reports zero confidence, that a workspace written
-before provenance existed decodes as estimated rather than silently claiming measurement, that
-the configurable fleet paths reject shell injection and `..` escapes, and — added after an
-audit found them — that an unreadable workspace is recoverable from a backup **while locked
-out**, that a failed restore is a no-op on your data, and that re-importing the same sales
-report does not double your revenue.
-
-See [CHANGELOG.md](CHANGELOG.md) for release notes.
-
-## Licence
+## License
 
 MIT. See [LICENSE](LICENSE).

@@ -118,29 +118,29 @@ struct WhatsNewSheet: View {
 
     private let highlights: [(String, String, String)] = [
         (
-            "tray.full",
-            "Attention Inbox",
-            "Command Center now lists only actionable gaps — blocked agents, refused attribution, stale sources, zero-evidence modelled value, and missing backups."
+            "scope",
+            "Decision Lab",
+            "Rank portfolio and agent decisions from evidence, compare rolling periods, and keep the rationale beside every recommendation."
         ),
         (
-            "command",
-            "Command palette",
-            "Press ⌘K to jump to any section or run import, export, lock, and more without hunting through menus."
+            "apple.logo",
+            "Direct App Store sales",
+            "Sync the latest daily Summary Sales report with a read-only key and Vendor Number. Imported proceeds become confirmed observations and cash ledger entries."
         ),
         (
-            "square.and.arrow.down.on.square",
-            "Import preview & drag-and-drop",
-            "CSV/TSV files show a count of apps, observations and ledger rows before anything is written. Drop files onto Command Center or Ledger."
+            "slider.horizontal.3",
+            "Scenario Studio",
+            "Test price, volume, proceeds, refunds, costs, and labor assumptions. Net cash and modelled capacity are calculated separately and never combined."
         ),
         (
-            "plus.square.on.square",
-            "Duplicate agents & experiments",
-            "Clone a profile to start the next variant quickly. Telemetry counters reset; value provenance becomes a manual duplicate so evidence is never invented."
+            "camera.metering.matrix",
+            "Business checkpoints",
+            "Capture point-in-time cash, portfolio, agent, and evidence measures before a release, price change, or staffing decision, then compare them with today."
         ),
         (
-            "keyboard",
-            "Keyboard shortcuts",
-            "⌘1–⌘9 navigate sections. ⌘N adds in context. ⌘I imports. ⌘E exports the ledger. ⌘/ shows this cheat sheet."
+            "doc.richtext",
+            "Executive briefs",
+            "Export a self-contained, print-ready HTML report that ranks decisions and states its evidence limits. Vault items and secret values are excluded."
         )
     ]
 
@@ -148,9 +148,9 @@ struct WhatsNewSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("What’s new in 1.1")
+                    Text("What’s new in 2.0")
                         .font(.title2.weight(.semibold))
-                    Text("Operator Workspace — useful defaults for people who live in the ledger.")
+                    Text("Decision Intelligence — from keeping records to making defensible calls.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -184,6 +184,6 @@ struct WhatsNewSheet: View {
                 .padding(20)
             }
         }
-        .frame(width: 560, height: 460)
+        .frame(width: 600, height: 520)
     }
 }
