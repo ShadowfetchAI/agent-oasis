@@ -1,5 +1,47 @@
 # Changelog
 
+## 3.0.0 - Hermes Fleet (2026-08-02)
+
+Agentic operations becomes a first-class part of the workspace, not a sync button buried in
+Agents. Hermes Fleet reads a live [Hermes](https://github.com/ShadowfetchAI) install over SSH
+and shows what is actually measurable there - kanban shape, the open decision queue, roster,
+gateway liveness, and structural fleet integrity - with nothing invented where Hermes itself
+has no aggregate to report.
+
+### Hermes Fleet
+- Added a dedicated top-level "Hermes Fleet" section, its own sidebar entry and keyboard
+  shortcut, replacing the old aggregate-only sync tucked behind the Agents tab.
+- Added kanban health: live by-status counts and the oldest blocked cards (title, assignee,
+  age) read via `hermes kanban stats --json` and `hermes kanban list --json`.
+- Added the open decision queue, grouped and colored by ack-deadline urgency, read via the
+  standalone `decide.py list --json` tool.
+- Added roster and gateway-process panels read via `hermes profile list` and
+  `hermes gateway list`.
+- Added fleet structural integrity (`fleet_integrity.py`'s clean/issues state).
+- Kept per-agent session/message/token telemetry from the prior release, now living in the
+  same dashboard instead of a separate tab.
+- Every configurable remote path (profiles, tools, state, gateway unit pattern) is validated
+  against the same injection-resistant charset already used for the SSH host, so this works
+  against any Hermes install rather than assuming Shadowfetch's own layout.
+- No fleet-wide "duty success rate" is reported: no such aggregate exists on a real Hermes
+  install, and inventing one would be exactly the manufactured-confidence Decision Lab exists
+  to refuse elsewhere in this app.
+
+### Redaction, by construction
+- Kanban card bodies and decision context/recommendation/options text - which on a real
+  install contain named-executive strategic content - are never decoded into the app. The
+  Swift models for both simply have no property for that data; `JSONDecoder` drops it before a
+  value exists, so there is no filtering step downstream to get wrong.
+- New tests assert the sensitive text is verifiably absent from a re-encoded model, not merely
+  that a differently-named field is missing.
+
+### Product and quality
+- Added a new `docs/HERMES-FLEET.md` integration contract: exact commands, exact fields kept
+  versus dropped, and the full threat model for the expanded SSH surface.
+- Expanded the suite to 79 tests, including Hermes JSON/text parsing for every new data
+  domain, the redaction guarantee, and injection rejection for the two newly configurable
+  remote paths.
+
 ## 2.0.0 - Decision Intelligence (2026-08-02)
 
 Agent Oasis grows from an encrypted operating ledger into a private decision workspace.

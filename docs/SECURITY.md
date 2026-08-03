@@ -33,7 +33,12 @@ administrator account or a process already capable of inspecting another process
 There is no Shadowfetch backend. Network activity occurs only after explicit configuration:
 
 - HTTPS requests to `api.appstoreconnect.apple.com` for App Store Connect sync.
-- `/usr/bin/ssh` to the operator-configured alias for Hermes telemetry.
+- `/usr/bin/ssh` to the operator-configured Hermes host, running one combined, entirely
+  read-only command per sync (kanban stats/list, decision queue list, roster, gateway list,
+  a state-file `cat`, and per-profile `insights`). Nothing on the remote host is started,
+  stopped, written, or deleted. Kanban card and decision body text is never decoded into the
+  app - see [docs/HERMES-FLEET.md](HERMES-FLEET.md) for the full redaction mechanism and the
+  exact command list.
 
 The app has no analytics, telemetry, crash reporting, advertising SDK, remote update check,
 or hidden model/API call.
@@ -72,9 +77,9 @@ Official releases use:
 
 ## Deliberate limitations
 
-1. **Not sandboxed.** Optional fleet telemetry invokes `/usr/bin/ssh`, which conflicts with
-   the Mac App Sandbox. Agent Oasis is directly distributed rather than submitted to the Mac
-   App Store.
+1. **Not sandboxed.** Optional Hermes Fleet telemetry invokes `/usr/bin/ssh`, which conflicts
+   with the Mac App Sandbox. Agent Oasis is directly distributed rather than submitted to the
+   Mac App Store.
 2. **Unsigned source-build fallback.** A source build without the official provisioning
    profile cannot use the release keychain access group. It uses the compatibility keychain
    path so a developer is not locked out.

@@ -601,7 +601,7 @@ final class OasisStore: ObservableObject {
         switch selection {
         case .portfolio, .agents, .ledger, .experiments:
             pendingNewItem = true
-        case .commandCenter, .decisionLab, .connections, .vault, .audit, .settings:
+        case .commandCenter, .hermesFleet, .decisionLab, .connections, .vault, .audit, .settings:
             selection = .agents
             pendingNewItem = true
         }
@@ -643,13 +643,13 @@ final class OasisStore: ObservableObject {
 
     var appVersionString: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "2.0.0"
+            ?? "3.0.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         return "\(version) (\(build))"
     }
 
     var marketingVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0.0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "3.0.0"
     }
 
     func shouldShowWhatsNewOnUnlock() -> Bool {
@@ -864,9 +864,11 @@ final class OasisStore: ObservableObject {
         isSyncingHermes = true
         defer { isSyncingHermes = false }
         do {
-            let snapshot = try await HermesConnector.fetchFleetSnapshot(
+            let snapshot = try await HermesFleetService.fetchFleetSnapshot(
                 host: workspace.settings.remoteHermesHost,
                 profilesPath: workspace.settings.hermesProfilesPath,
+                toolsPath: workspace.settings.hermesToolsPath,
+                statePath: workspace.settings.hermesStatePath,
                 gatewayUnitPattern: workspace.settings.hermesGatewayUnitPattern
             )
             mutate(
@@ -875,6 +877,8 @@ final class OasisStore: ObservableObject {
                 entityName: workspace.settings.remoteHermesHost,
                 summary: "Read \(snapshot.agents.count) profiles and \(snapshot.activeGateways) active gateways."
             ) { state in
+                state.hermesFleetSnapshot = snapshot
+
                 for remote in snapshot.agents {
                     if let index = state.agents.firstIndex(where: {
                         Self.normalizedAgentName($0.name) == Self.normalizedAgentName(remote.name)

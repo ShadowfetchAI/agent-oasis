@@ -210,6 +210,8 @@ struct RootView: View {
         switch store.selection {
         case .commandCenter:
             CommandCenterView()
+        case .hermesFleet:
+            HermesFleetView()
         case .decisionLab:
             DecisionLabView()
         case .portfolio:

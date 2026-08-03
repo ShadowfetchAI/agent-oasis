@@ -2,6 +2,7 @@ import Foundation
 
 enum AppSection: String, CaseIterable, Identifiable, Codable {
     case commandCenter
+    case hermesFleet
     case decisionLab
     case portfolio
     case agents
@@ -23,6 +24,7 @@ enum AppSection: String, CaseIterable, Identifiable, Codable {
     var title: String {
         switch self {
         case .commandCenter: "Command Center"
+        case .hermesFleet: "Hermes Fleet"
         case .decisionLab: "Decision Lab"
         case .portfolio: "Portfolio"
         case .agents: "Agents"
@@ -38,6 +40,7 @@ enum AppSection: String, CaseIterable, Identifiable, Codable {
     var systemImage: String {
         switch self {
         case .commandCenter: "gauge.with.dots.needle.67percent"
+        case .hermesFleet: "point.3.filled.connected.trianglepath.dotted"
         case .decisionLab: "scope"
         case .portfolio: "square.grid.2x2"
         case .agents: "cpu"
@@ -522,6 +525,15 @@ struct WorkspaceSettings: Codable, Hashable {
 
     /// systemd --user unit pattern for a running agent gateway.
     var hermesGatewayUnitPattern = "hermes-gw@*.service"
+
+    /// Where `decide.py` lives on the remote host, relative to $HOME. Same reasoning as
+    /// `hermesProfilesPath`: configurable so this works against any Hermes install, not just
+    /// the one it was built against.
+    var hermesToolsPath = ".hermes-shadowfetch/bin"
+
+    /// Where `fleet_integrity.py` writes its state file, relative to $HOME.
+    var hermesStatePath = ".hermes-shadowfetch/state"
+
     var showCapacityValueInHeadline = false
 
     /// Marketing version whose What's New sheet was last dismissed (e.g. "2.0.0").
@@ -547,6 +559,10 @@ struct WorkspaceState: Codable, Hashable {
     /// Optional so encrypted workspaces written by 1.x decode without a migration cliff.
     var businessSnapshots: [BusinessSnapshot]?
     var settings = WorkspaceSettings()
+
+    /// Optional so workspaces written before the Hermes Fleet module (3.0.0) decode cleanly -
+    /// missing means no sync has run yet, not an empty fleet.
+    var hermesFleetSnapshot: HermesFleetSnapshot?
 
     var snapshots: [BusinessSnapshot] { businessSnapshots ?? [] }
 

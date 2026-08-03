@@ -70,6 +70,12 @@ hidden exchange rate.
 
 - **Command Center** - honest cash, modelled value, coverage, trends, and an actionable
   Attention Inbox
+- **Hermes Fleet** - a live agentic-operations dashboard: kanban shape and its oldest blockers,
+  the open decision queue by authority level, roster, gateway liveness, and fleet structural
+  integrity, all read over SSH with no aggregate invented where none exists. See
+  [docs/HERMES-FLEET.md](docs/HERMES-FLEET.md).
+- **Decision Lab** - portfolio postures, Agent Frontier cash-vs-modelled split, Scenario Studio,
+  checkpoints, and executive briefs
 - **Portfolio** - products, price history, observations, costs, proceeds, and source notes
 - **Agents** - local and Hermes-agent costs, supervision, outcomes, and evidence provenance
 - **Ledger** - income and expenses with currency, source, confidence, and audit history
@@ -128,7 +134,7 @@ you want to sign a personal build; see [SETUP.md](SETUP.md).
 
 ## Verification
 
-The 2.0 test suite contains 70 tests covering:
+The 3.0 test suite contains 79 tests covering:
 
 - encryption, wrong-key rejection, authenticated tamper detection, and owner-only files
 - recovery while locked out, failed-restore atomicity, and pre-destructive snapshots
@@ -139,6 +145,9 @@ The 2.0 test suite contains 70 tests covering:
 - audit-chain rewriting/removal detection and secret-free executive briefs
 - delimited-text edge cases, fleet path injection rejection, and no sample generator in the
   application target
+- Hermes Fleet: kanban/decision JSON parsing, the redaction guarantee that card and decision
+  body text never decodes into the app, roster and gateway text-table parsing, and injection
+  rejection for every configurable remote path
 
 ```sh
 xcodegen generate
@@ -150,6 +159,7 @@ xcodebuild -project AgentOasis.xcodeproj -scheme AgentOasis \
 ## Documentation
 
 - [Setup and first run](SETUP.md)
+- [Hermes Fleet integration](docs/HERMES-FLEET.md)
 - [Decision Lab](docs/DECISION-LAB.md)
 - [App Store Connect integration](docs/APP-STORE-CONNECT.md)
 - [Security model](docs/SECURITY.md)

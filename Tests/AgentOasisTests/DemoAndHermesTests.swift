@@ -15,15 +15,25 @@ final class DemoAndHermesTests: XCTestCase {
 
     func testHermesResponseParsingPreservesReportedTokenCategories() throws {
         let output = """
-        VERSION\tHermes Agent v0.18.2
-        PROFILE_COUNT\t2
-        ACTIVE_GATEWAYS\t1
-        KANBAN\ttriage 1 todo 3
+        ===VERSION===
+        Hermes Agent v0.18.2
+        ===PROFILE_COUNT===
+        2
+        ===ACTIVE_GATEWAYS===
+        1
+        ===KANBAN_STATS===
+        ===KANBAN_BLOCKED===
+        ===DECISIONS===
+        ===ROSTER===
+        ===GATEWAYS===
+        ===INTEGRITY===
+        ===AGENTS===
         AGENT\tkai-kimber\t1\t12\t320\t88\t100000\t9000\t420000
         AGENT\tresearch\t0\t4\t90\t21\t30000\t3500\t101000
+        ===END===
         """
 
-        let result = try HermesConnector.parse(output)
+        let result = try HermesFleetService.parse(output)
 
         XCTAssertEqual(result.profileCount, 2)
         XCTAssertEqual(result.activeGateways, 1)
@@ -53,7 +63,7 @@ final class DemoAndHermesTests: XCTestCase {
         ]
         for path in bad {
             do {
-                _ = try await HermesConnector.fetchFleetSnapshot(
+                _ = try await HermesFleetService.fetchFleetSnapshot(
                     host: "example", profilesPath: path)
                 XCTFail("Accepted a dangerous profiles path: \(path)")
             } catch let error as HermesConnectorError {
@@ -70,7 +80,7 @@ final class DemoAndHermesTests: XCTestCase {
     /// An empty result must say what it looked for, not just "malformed".
     func testEmptyFleetNamesTheSearchedPath() {
         do {
-            _ = try HermesConnector.parse("", searchedPath: "custom/agents")
+            _ = try HermesFleetService.parse("", searchedPath: "custom/agents")
             XCTFail("Empty telemetry should not parse")
         } catch let error as HermesConnectorError {
             guard case .noProfilesFound(let searched) = error else {

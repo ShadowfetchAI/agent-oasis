@@ -226,7 +226,7 @@ private enum PreviewWorkspaceBootstrap {
             let data = try Data(contentsOf: fixtureURL)
             let decoder = JSONDecoder()
             var workspace = try decoder.decode(WorkspaceState.self, from: data)
-            workspace.settings.lastSeenReleaseNotes = "2.0.0"
+            workspace.settings.lastSeenReleaseNotes = "3.0.0"
 
             let keyMaterial = Data(SHA256.hash(
                 data: Data("agent-oasis-isolated-preview-v1".utf8)
